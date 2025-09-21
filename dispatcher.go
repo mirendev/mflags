@@ -1,0 +1,550 @@
+package mflags
+
+import (
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+)
+
+// Command is an interface for executable commands
+type Command interface {
+	// FlagSet returns the flagset for this command
+	FlagSet() *FlagSet
+
+	// Run executes the command with parsed flags and remaining arguments
+	Run(fs *FlagSet, args []string) error
+
+	// Usage returns the usage description for this command
+	Usage() string
+}
+
+// OutputFormatter is an interface for commands that can specify their output format
+type OutputFormatter interface {
+	// OutputFormat returns the output format for this command
+	OutputFormat() OutputFormat
+}
+
+// OutputFormat defines how a command formats its output
+type OutputFormat string
+
+const (
+	OutputFormatRaw  OutputFormat = "raw"
+	OutputFormatJSON OutputFormat = "json"
+)
+
+// SimpleCommand is a basic implementation of Command interface
+type SimpleCommand struct {
+	flags        *FlagSet
+	handler      func(fs *FlagSet, args []string) error
+	usage        string
+	outputFormat OutputFormat
+}
+
+// NewSimpleCommand creates a new SimpleCommand
+func NewSimpleCommand(fs *FlagSet, handler func(fs *FlagSet, args []string) error) *SimpleCommand {
+	return &SimpleCommand{
+		flags:        fs,
+		handler:      handler,
+		usage:        "",
+		outputFormat: OutputFormatRaw, // Default to raw
+	}
+}
+
+// NewSimpleCommandWithUsage creates a new SimpleCommand with a usage description
+func NewSimpleCommandWithUsage(fs *FlagSet, handler func(fs *FlagSet, args []string) error, usage string) *SimpleCommand {
+	return &SimpleCommand{
+		flags:        fs,
+		handler:      handler,
+		usage:        usage,
+		outputFormat: OutputFormatRaw, // Default to raw
+	}
+}
+
+// NewSimpleCommandWithFormat creates a new SimpleCommand with a specific output format
+func NewSimpleCommandWithFormat(fs *FlagSet, handler func(fs *FlagSet, args []string) error, format OutputFormat) *SimpleCommand {
+	return &SimpleCommand{
+		flags:        fs,
+		handler:      handler,
+		usage:        "",
+		outputFormat: format,
+	}
+}
+
+// NewSimpleCommandFull creates a new SimpleCommand with all options
+func NewSimpleCommandFull(fs *FlagSet, handler func(fs *FlagSet, args []string) error, usage string, format OutputFormat) *SimpleCommand {
+	return &SimpleCommand{
+		flags:        fs,
+		handler:      handler,
+		usage:        usage,
+		outputFormat: format,
+	}
+}
+
+// FlagSet returns the flagset for this command
+func (c *SimpleCommand) FlagSet() *FlagSet {
+	return c.flags
+}
+
+// Run executes the command
+func (c *SimpleCommand) Run(fs *FlagSet, args []string) error {
+	if c.handler != nil {
+		return c.handler(fs, args)
+	}
+	return nil
+}
+
+// Usage returns the usage description for this command
+func (c *SimpleCommand) Usage() string {
+	return c.usage
+}
+
+// OutputFormat returns the output format for this command
+func (c *SimpleCommand) OutputFormat() OutputFormat {
+	return c.outputFormat
+}
+
+// SetOutputFormat sets the output format for this command
+func (c *SimpleCommand) SetOutputFormat(format OutputFormat) {
+	c.outputFormat = format
+}
+
+// CommandEntry represents a registered command entry
+type CommandEntry struct {
+	Path    string  // The command path (e.g., "foo bar")
+	Command Command // The command implementation
+	Usage   string  // Optional usage description
+}
+
+// Dispatcher manages command routing and execution
+type Dispatcher struct {
+	commands map[string]*CommandEntry
+	name     string
+}
+
+// NewDispatcher creates a new command dispatcher
+func NewDispatcher(name string) *Dispatcher {
+	return &Dispatcher{
+		commands: make(map[string]*CommandEntry),
+		name:     name,
+	}
+}
+
+// Dispatch registers a command
+func (d *Dispatcher) Dispatch(path string, cmd Command) {
+	// Normalize the path by trimming spaces and collapsing multiple spaces
+	normalizedPath := normalizeCommandPath(path)
+
+	d.commands[normalizedPath] = &CommandEntry{
+		Path:    normalizedPath,
+		Command: cmd,
+		Usage:   cmd.Usage(),
+	}
+}
+
+// Execute runs the dispatcher with the given arguments
+func (d *Dispatcher) Execute(args []string) error {
+	// Check for completion requests first
+	if d.HandleCompletion(args) {
+		return nil
+	}
+
+	if len(args) == 0 {
+		return d.showHelp()
+	}
+
+	// Try to find the longest matching command
+	entry, remainingArgs := d.findCommand(args)
+
+	if entry == nil {
+		// No command found, check for help flags
+		if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+			return d.showHelp()
+		}
+		return fmt.Errorf("unknown command: %s", strings.Join(args, " "))
+	}
+
+	// Check if help is requested for this specific command
+	if len(remainingArgs) > 0 && (remainingArgs[0] == "--help" || remainingArgs[0] == "-h") {
+		return d.showCommandHelp(entry)
+	}
+
+	// Parse flags for this command
+	fs := entry.Command.FlagSet()
+	if err := fs.Parse(remainingArgs); err != nil {
+		return fmt.Errorf("error parsing flags: %w", err)
+	}
+
+	// Execute the command with the parsed flagset and remaining args
+	return entry.Command.Run(fs, fs.Args())
+}
+
+// Run is an alias for Execute
+func (d *Dispatcher) Run(args []string) error {
+	return d.Execute(args)
+}
+
+// findCommand finds the best matching command for the given arguments
+func (d *Dispatcher) findCommand(args []string) (*CommandEntry, []string) {
+	// Try progressively shorter command paths
+	for i := len(args); i > 0; i-- {
+		path := normalizeCommandPath(strings.Join(args[:i], " "))
+		if entry, ok := d.commands[path]; ok {
+			return entry, args[i:]
+		}
+	}
+
+	return nil, args
+}
+
+// normalizeCommandPath normalizes a command path for consistent lookup
+func normalizeCommandPath(path string) string {
+	// Split by spaces, filter empty strings, and rejoin
+	parts := strings.Fields(path)
+	return strings.Join(parts, " ")
+}
+
+// showHelp displays available commands
+func (d *Dispatcher) showHelp() error {
+	fmt.Printf("Usage: %s <command> [arguments]\n\n", d.name)
+	fmt.Println("Available commands:")
+
+	// Collect and sort command paths
+	var paths []string
+	maxLen := 0
+	for path := range d.commands {
+		paths = append(paths, path)
+		if len(path) > maxLen {
+			maxLen = len(path)
+		}
+	}
+
+	// Sort paths for consistent output
+	sortedPaths := make([]string, len(paths))
+	copy(sortedPaths, paths)
+	for i := 0; i < len(sortedPaths); i++ {
+		for j := i + 1; j < len(sortedPaths); j++ {
+			if sortedPaths[i] > sortedPaths[j] {
+				sortedPaths[i], sortedPaths[j] = sortedPaths[j], sortedPaths[i]
+			}
+		}
+	}
+
+	// Print commands with usage
+	for _, path := range sortedPaths {
+		entry := d.commands[path]
+		if entry.Usage != "" {
+			fmt.Printf("  %-*s  %s\n", maxLen+2, path, entry.Usage)
+		} else {
+			fmt.Printf("  %s\n", path)
+		}
+	}
+
+	fmt.Println("\nUse '<command> --help' for more information about a command.")
+	return nil
+}
+
+// showCommandHelp displays help for a specific command
+func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
+	fmt.Printf("Usage: %s %s [options]", d.name, entry.Path)
+	fs := entry.Command.FlagSet()
+	if fs != nil {
+		// Check if there are positional arguments expected
+		hasPositional := false
+		if len(fs.posFields) > 0 {
+			hasPositional = true
+		}
+		if fs.restField != nil {
+			hasPositional = true
+		}
+		if hasPositional {
+			fmt.Print(" [arguments]")
+		}
+	}
+	fmt.Println()
+
+	if entry.Usage != "" {
+		fmt.Printf("\n%s\n", entry.Usage)
+	}
+
+	// Show flags if any are defined
+	if fs != nil {
+		hasFlags := false
+		fs.VisitAll(func(flag *Flag) {
+			if !hasFlags {
+				fmt.Println("\nOptions:")
+				hasFlags = true
+			}
+
+			// Format flag display
+			var flagStr string
+			if flag.Short != 0 && flag.Name != "" {
+				flagStr = fmt.Sprintf("  -%c, --%s", flag.Short, flag.Name)
+			} else if flag.Short != 0 {
+				flagStr = fmt.Sprintf("  -%c", flag.Short)
+			} else {
+				flagStr = fmt.Sprintf("      --%s", flag.Name)
+			}
+
+			// Add value placeholder for non-boolean flags
+			if !flag.Value.IsBool() {
+				flagStr += " <value>"
+			}
+
+			// Print flag with usage
+			if flag.Usage != "" {
+				fmt.Printf("%-30s %s", flagStr, flag.Usage)
+				if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "0" {
+					fmt.Printf(" (default: %s)", flag.DefValue)
+				}
+				fmt.Println()
+			} else {
+				fmt.Println(flagStr)
+			}
+		})
+	}
+
+	return nil
+}
+
+// GetCommand returns the command for a given path, or nil if not found
+func (d *Dispatcher) GetCommand(path string) Command {
+	normalizedPath := normalizeCommandPath(path)
+	if entry, ok := d.commands[normalizedPath]; ok {
+		return entry.Command
+	}
+	return nil
+}
+
+// GetCommandEntry returns the command entry for a given path, or nil if not found
+func (d *Dispatcher) GetCommandEntry(path string) *CommandEntry {
+	normalizedPath := normalizeCommandPath(path)
+	return d.commands[normalizedPath]
+}
+
+// GetCommands returns all registered commands
+func (d *Dispatcher) GetCommands() map[string]Command {
+	// Return a copy to prevent external modification
+	result := make(map[string]Command)
+	for k, v := range d.commands {
+		result[k] = v.Command
+	}
+	return result
+}
+
+// HasCommand checks if a command is registered
+func (d *Dispatcher) HasCommand(path string) bool {
+	normalizedPath := normalizeCommandPath(path)
+	_, exists := d.commands[normalizedPath]
+	return exists
+}
+
+// Remove unregisters a command
+func (d *Dispatcher) Remove(path string) {
+	normalizedPath := normalizeCommandPath(path)
+	delete(d.commands, normalizedPath)
+}
+
+// GetCommandCompletions returns completions for commands based on the prefix
+func (d *Dispatcher) GetCommandCompletions(prefix string) []Completion {
+	var completions []Completion
+
+	// Normalize the prefix
+	normalizedPrefix := normalizeCommandPath(prefix)
+
+	for path, entry := range d.commands {
+		// Check if the command path starts with the prefix
+		if strings.HasPrefix(path, normalizedPrefix) {
+			completions = append(completions, Completion{
+				Value:       path,
+				Description: entry.Usage,
+				IsBool:      false, // Commands are not boolean flags
+			})
+		}
+	}
+
+	// Sort completions
+	sort.Slice(completions, func(i, j int) bool {
+		return completions[i].Value < completions[j].Value
+	})
+
+	return completions
+}
+
+// HandleCompletion handles shell completion requests for the dispatcher
+// Returns true if a completion request was handled
+func (d *Dispatcher) HandleCompletion(args []string) bool {
+	// Check for bash completion mode
+	if os.Getenv("COMP_LINE") != "" {
+		// We're being called by bash completion
+		d.PrintBashCompletions(args)
+		return true
+	}
+
+	// Check for explicit completion flags
+	if len(args) > 0 {
+		switch args[0] {
+		case "--complete-bash":
+			d.PrintBashCompletions(args[1:])
+			return true
+		case "--complete-zsh":
+			d.PrintZshCompletions(args[1:])
+			return true
+		case "--generate-bash-completion":
+			fmt.Print(d.GenerateBashCompletion())
+			return true
+		case "--generate-zsh-completion":
+			fmt.Print(d.GenerateZshCompletion())
+			return true
+		}
+	}
+
+	return false
+}
+
+// PrintBashCompletions outputs completions in bash format
+func (d *Dispatcher) PrintBashCompletions(args []string) {
+	// Determine what we're completing
+	if len(args) == 0 {
+		// Complete commands
+		completions := d.GetCommandCompletions("")
+		for _, comp := range completions {
+			fmt.Println(comp.Value)
+		}
+		return
+	}
+
+	// Try to find the command being completed
+	currentWord := ""
+	if len(args) > 0 {
+		currentWord = args[len(args)-1]
+	}
+
+	// First, check if we're completing a partial command
+	entry, remainingArgs := d.findCommand(args)
+
+	if entry == nil {
+		// No exact command match, show command completions
+		prefix := strings.Join(args, " ")
+		completions := d.GetCommandCompletions(prefix)
+		for _, comp := range completions {
+			fmt.Println(comp.Value)
+		}
+	} else {
+		// We have a command, complete its flags
+		fs := entry.Command.FlagSet()
+		if fs != nil {
+			// Check if we need to complete a flag value
+			if len(remainingArgs) >= 2 {
+				prevArg := remainingArgs[len(remainingArgs)-2]
+				if strings.HasPrefix(prevArg, "-") {
+					// Check if previous arg was a flag that needs a value
+					flagName := strings.TrimLeft(prevArg, "-")
+
+					// Check long flags
+					if flag, ok := fs.flags[flagName]; ok && !flag.Value.IsBool() {
+						// We're completing a value for this flag
+						return
+					}
+
+					// Check short flags
+					if len(prevArg) == 2 {
+						if flag, ok := fs.shortMap[rune(prevArg[1])]; ok && !flag.Value.IsBool() {
+							// We're completing a value for this flag
+							return
+						}
+					}
+				}
+			}
+
+			// Get flag completions
+			completions := fs.GetFlagCompletions(currentWord)
+			for _, comp := range completions {
+				fmt.Println(comp.Value)
+			}
+		}
+	}
+}
+
+// PrintZshCompletions outputs completions in zsh format
+func (d *Dispatcher) PrintZshCompletions(args []string) {
+	// Get all command completions
+	commandCompletions := d.GetCommandCompletions("")
+
+	// Print command completions
+	for _, comp := range commandCompletions {
+		if comp.Description != "" {
+			fmt.Printf("%s:%s\n", comp.Value, comp.Description)
+		} else {
+			fmt.Println(comp.Value)
+		}
+	}
+
+	// If we have a specific command, also show its flags
+	if len(args) > 0 {
+		entry, _ := d.findCommand(args)
+		if entry != nil {
+			fs := entry.Command.FlagSet()
+			if fs != nil {
+				flagCompletions := fs.GetFlagCompletions("")
+				for _, comp := range flagCompletions {
+					if comp.Description != "" {
+						fmt.Printf("%s:%s\n", comp.Value, comp.Description)
+					} else {
+						fmt.Println(comp.Value)
+					}
+				}
+			}
+		}
+	}
+}
+
+// GenerateBashCompletion generates a bash completion script for the dispatcher
+func (d *Dispatcher) GenerateBashCompletion() string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("# Bash completion for %s\n", d.name))
+	sb.WriteString(fmt.Sprintf("_%s_completion() {\n", d.name))
+	sb.WriteString("    local cur prev words cword\n")
+	sb.WriteString("    _init_completion || return\n\n")
+	sb.WriteString("    # Get completions from the program\n")
+	sb.WriteString(fmt.Sprintf("    local completions=$(%s --complete-bash \"${COMP_WORDS[@]:1:$COMP_CWORD}\")\n", d.name))
+	sb.WriteString("    COMPREPLY=( $(compgen -W \"$completions\" -- \"$cur\") )\n")
+	sb.WriteString("}\n\n")
+	sb.WriteString(fmt.Sprintf("complete -F _%s_completion %s\n", d.name, d.name))
+
+	return sb.String()
+}
+
+// GenerateZshCompletion generates a zsh completion script for the dispatcher
+func (d *Dispatcher) GenerateZshCompletion() string {
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("#compdef %s\n\n", d.name))
+	sb.WriteString(fmt.Sprintf("_%s() {\n", d.name))
+	sb.WriteString("    local -a commands\n")
+	sb.WriteString("    commands=(\n")
+
+	// Add all commands with descriptions
+	for path, entry := range d.commands {
+		desc := strings.ReplaceAll(entry.Usage, "'", "'\"'\"'")
+		if desc != "" {
+			sb.WriteString(fmt.Sprintf("        '%s[%s]'\n", path, desc))
+		} else {
+			sb.WriteString(fmt.Sprintf("        '%s'\n", path))
+		}
+	}
+
+	sb.WriteString("    )\n\n")
+	sb.WriteString("    # If we have a command, complete its flags\n")
+	sb.WriteString("    if (( CURRENT > 2 )); then\n")
+	sb.WriteString("        # Get the command\n")
+	sb.WriteString("        local cmd=\"${words[2]}\"\n")
+	sb.WriteString("        # TODO: Add flag completion for specific commands\n")
+	sb.WriteString("    fi\n\n")
+	sb.WriteString("    _describe 'command' commands\n")
+	sb.WriteString("}\n\n")
+	sb.WriteString(fmt.Sprintf("_%s\n", d.name))
+
+	return sb.String()
+}

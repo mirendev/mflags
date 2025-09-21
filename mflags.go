@@ -16,14 +16,21 @@ var (
 	ErrHelp         = errors.New("help requested")
 )
 
+// PositionalField represents a positional argument field
+type PositionalField struct {
+	Name  string        // Field name (e.g., "Command", "Target")
+	Value reflect.Value // The reflect.Value of the field
+	Type  reflect.Type  // The type of the field
+}
+
 type FlagSet struct {
 	name      string
 	flags     map[string]*Flag
 	shortMap  map[rune]*Flag
 	args      []string
 	parsed    bool
-	restField *[]string             // Pointer to field marked with "rest" tag
-	posFields map[int]reflect.Value // Map of position to field value
+	restField *[]string                // Pointer to field marked with "rest" tag
+	posFields map[int]*PositionalField // Map of position to positional field info
 }
 
 type Flag struct {
@@ -132,7 +139,7 @@ func NewFlagSet(name string) *FlagSet {
 		name:      name,
 		flags:     make(map[string]*Flag),
 		shortMap:  make(map[rune]*Flag),
-		posFields: make(map[int]reflect.Value),
+		posFields: make(map[int]*PositionalField),
 	}
 }
 
@@ -195,6 +202,78 @@ func (f *FlagSet) Duration(name string, short rune, value time.Duration, usage s
 	return p
 }
 
+// Positional argument methods
+
+func (f *FlagSet) BoolPosVar(p *bool, name string, position int, value bool, usage string) {
+	*p = value
+	f.posFields[position] = &PositionalField{
+		Name:  name,
+		Value: reflect.ValueOf(p).Elem(),
+		Type:  reflect.TypeOf(*p),
+	}
+}
+
+func (f *FlagSet) BoolPos(name string, position int, value bool, usage string) *bool {
+	p := new(bool)
+	f.BoolPosVar(p, name, position, value, usage)
+	return p
+}
+
+func (f *FlagSet) StringPosVar(p *string, name string, position int, value string, usage string) {
+	*p = value
+	f.posFields[position] = &PositionalField{
+		Name:  name,
+		Value: reflect.ValueOf(p).Elem(),
+		Type:  reflect.TypeOf(*p),
+	}
+}
+
+func (f *FlagSet) StringPos(name string, position int, value string, usage string) *string {
+	p := new(string)
+	f.StringPosVar(p, name, position, value, usage)
+	return p
+}
+
+func (f *FlagSet) IntPosVar(p *int, name string, position int, value int, usage string) {
+	*p = value
+	f.posFields[position] = &PositionalField{
+		Name:  name,
+		Value: reflect.ValueOf(p).Elem(),
+		Type:  reflect.TypeOf(*p),
+	}
+}
+
+func (f *FlagSet) IntPos(name string, position int, value int, usage string) *int {
+	p := new(int)
+	f.IntPosVar(p, name, position, value, usage)
+	return p
+}
+
+func (f *FlagSet) DurationPosVar(p *time.Duration, name string, position int, value time.Duration, usage string) {
+	*p = value
+	f.posFields[position] = &PositionalField{
+		Name:  name,
+		Value: reflect.ValueOf(p).Elem(),
+		Type:  reflect.TypeOf(*p),
+	}
+}
+
+func (f *FlagSet) DurationPos(name string, position int, value time.Duration, usage string) *time.Duration {
+	p := new(time.Duration)
+	f.DurationPosVar(p, name, position, value, usage)
+	return p
+}
+
+// Rest arguments method
+
+func (f *FlagSet) Rest(p *[]string, usage string) {
+	if p == nil {
+		panic("Rest: pointer cannot be nil")
+	}
+	*p = []string{}
+	f.restField = p
+}
+
 func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 	flag := &Flag{
 		Name:     name,
@@ -210,6 +289,59 @@ func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 	if short != 0 {
 		f.shortMap[short] = flag
 	}
+}
+
+// Lookup returns the Flag with the given name, or nil if not found
+func (f *FlagSet) Lookup(name string) *Flag {
+	return f.flags[name]
+}
+
+// HasPositionalArgs returns true if the FlagSet has positional arguments defined
+func (f *FlagSet) HasPositionalArgs() bool {
+	return len(f.posFields) > 0
+}
+
+// HasRestArgs returns true if the FlagSet accepts remaining arguments
+func (f *FlagSet) HasRestArgs() bool {
+	return f.restField != nil
+}
+
+// PositionalCount returns the number of positional arguments defined
+func (f *FlagSet) PositionalCount() int {
+	if len(f.posFields) == 0 {
+		return 0
+	}
+	maxPos := -1
+	for pos := range f.posFields {
+		if pos > maxPos {
+			maxPos = pos
+		}
+	}
+	return maxPos + 1
+}
+
+// GetPositionalFields returns the positional fields in order
+func (f *FlagSet) GetPositionalFields() []*PositionalField {
+	if len(f.posFields) == 0 {
+		return nil
+	}
+
+	// Find max position
+	maxPos := -1
+	for pos := range f.posFields {
+		if pos > maxPos {
+			maxPos = pos
+		}
+	}
+
+	// Build ordered slice
+	result := make([]*PositionalField, 0, maxPos+1)
+	for i := 0; i <= maxPos; i++ {
+		if field, ok := f.posFields[i]; ok {
+			result = append(result, field)
+		}
+	}
+	return result
 }
 
 func (f *FlagSet) Parse(arguments []string) error {
@@ -247,9 +379,9 @@ func (f *FlagSet) Parse(arguments []string) error {
 	}
 
 	// Process positional arguments
-	for pos, fieldValue := range f.posFields {
+	for pos, field := range f.posFields {
 		if pos < len(f.args) {
-			if err := setFieldValue(fieldValue, f.args[pos]); err != nil {
+			if err := setFieldValue(field.Value, f.args[pos]); err != nil {
 				return fmt.Errorf("invalid value for position %d: %v", pos, err)
 			}
 		}
@@ -424,7 +556,11 @@ func (f *FlagSet) FromStruct(v any) error {
 		if posStr := field.Tag.Get("position"); posStr != "" {
 			pos, err := strconv.Atoi(posStr)
 			if err == nil && pos >= 0 {
-				f.posFields[pos] = fieldValue
+				f.posFields[pos] = &PositionalField{
+					Name:  field.Name,
+					Value: fieldValue,
+					Type:  field.Type,
+				}
 			}
 			continue // Don't process position field as a flag
 		}
