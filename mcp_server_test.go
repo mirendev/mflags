@@ -16,7 +16,7 @@ func TestMCPServerInitialization(t *testing.T) {
 	d := NewDispatcher("testapp")
 
 	fs := NewFlagSet("echo")
-	cmd := NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		fmt.Print("Hello from echo command")
 		return nil
 	})
@@ -91,16 +91,16 @@ func TestMCPServerToolsList(t *testing.T) {
 	fs1 := NewFlagSet("build")
 	fs1.String("output", 'o', "a.out", "output file")
 	fs1.Bool("verbose", 'v', false, "verbose output")
-	cmd1 := NewSimpleCommandWithUsage(fs1,
+	cmd1 := NewCommand(fs1,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Build the project")
+		WithUsage("Build the project"))
 	d.Dispatch("build", cmd1)
 
 	// Add a simple command
 	fs2 := NewFlagSet("test")
-	cmd2 := NewSimpleCommandWithUsage(fs2,
+	cmd2 := NewCommand(fs2,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Run tests")
+		WithUsage("Run tests"))
 	d.Dispatch("test", cmd2)
 
 	// Create MCP server
@@ -188,7 +188,7 @@ func TestMCPServerToolCall(t *testing.T) {
 	var capturedPrefix string
 	var capturedArgs []string
 
-	cmd := NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		prefix := flags.Lookup("prefix")
 		if prefix != nil {
 			capturedPrefix = prefix.Value.String()
@@ -274,7 +274,7 @@ func TestMCPServerToolCallWithJSONOutput(t *testing.T) {
 
 	fs := NewFlagSet("status")
 
-	cmd := NewSimpleCommandWithFormat(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		output := map[string]interface{}{
 			"status":  "ok",
 			"version": "1.0.0",
@@ -283,7 +283,7 @@ func TestMCPServerToolCallWithJSONOutput(t *testing.T) {
 		data, _ := json.Marshal(output)
 		fmt.Print(string(data))
 		return nil
-	}, OutputFormatJSON)
+	}, WithOutputFormat(OutputFormatJSON))
 
 	d.Dispatch("status", cmd)
 
@@ -358,7 +358,7 @@ func TestMCPServerErrorHandling(t *testing.T) {
 	d := NewDispatcher("testapp")
 
 	fs := NewFlagSet("fail")
-	cmd := NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		return fmt.Errorf("command failed with error")
 	})
 
@@ -599,7 +599,7 @@ func TestMCPServerCommand(t *testing.T) {
 	d := NewDispatcher("testapp")
 
 	// Add a test command
-	d.Dispatch("test", NewSimpleCommand(NewFlagSet("test"),
+	d.Dispatch("test", NewCommand(NewFlagSet("test"),
 		func(fs *FlagSet, args []string) error {
 			fmt.Print("test output")
 			return nil
@@ -613,22 +613,22 @@ func TestMCPServerCommand(t *testing.T) {
 	assert.Equal(t, OutputFormatJSON, mcpCmd.OutputFormat())
 }
 
-func TestSimpleCommandWithFormat(t *testing.T) {
+func TestCommandWithFormat(t *testing.T) {
 	fs := NewFlagSet("test")
 	handler := func(fs *FlagSet, args []string) error { return nil }
 
-	// Test NewSimpleCommandWithFormat
-	cmd1 := NewSimpleCommandWithFormat(fs, handler, OutputFormatJSON)
+	// Test NewCommand with WithOutputFormat
+	cmd1 := NewCommand(fs, handler, WithOutputFormat(OutputFormatJSON)).(*funcCommand)
 	assert.Equal(t, OutputFormatJSON, cmd1.OutputFormat())
 	assert.Equal(t, "", cmd1.Usage())
 
-	// Test NewSimpleCommandFull
-	cmd2 := NewSimpleCommandFull(fs, handler, "Test command", OutputFormatRaw)
+	// Test NewCommand with multiple options
+	cmd2 := NewCommand(fs, handler, WithUsage("Test command"), WithOutputFormat(OutputFormatRaw)).(*funcCommand)
 	assert.Equal(t, OutputFormatRaw, cmd2.OutputFormat())
 	assert.Equal(t, "Test command", cmd2.Usage())
 
 	// Test default format
-	cmd3 := NewSimpleCommand(fs, handler)
+	cmd3 := NewCommand(fs, handler).(*funcCommand)
 	assert.Equal(t, OutputFormatRaw, cmd3.OutputFormat())
 
 	// Test SetOutputFormat
@@ -652,9 +652,9 @@ func TestMCPServerPositionalArgsSchema(t *testing.T) {
 	err := fs1.FromStruct(copyConfig)
 	assert.NoError(t, err)
 
-	cmd1 := NewSimpleCommandWithUsage(fs1,
+	cmd1 := NewCommand(fs1,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Copy files from source to destination")
+		WithUsage("Copy files from source to destination"))
 	d.Dispatch("copy", cmd1)
 
 	// Command with rest arguments via struct
@@ -668,9 +668,9 @@ func TestMCPServerPositionalArgsSchema(t *testing.T) {
 	err = fs2.FromStruct(catConfig)
 	assert.NoError(t, err)
 
-	cmd2 := NewSimpleCommandWithUsage(fs2,
+	cmd2 := NewCommand(fs2,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Concatenate files")
+		WithUsage("Concatenate files"))
 	d.Dispatch("cat", cmd2)
 
 	// Command with both positional and rest arguments
@@ -685,9 +685,9 @@ func TestMCPServerPositionalArgsSchema(t *testing.T) {
 	err = fs3.FromStruct(execConfig)
 	assert.NoError(t, err)
 
-	cmd3 := NewSimpleCommandWithUsage(fs3,
+	cmd3 := NewCommand(fs3,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Execute a command")
+		WithUsage("Execute a command"))
 	d.Dispatch("exec", cmd3)
 
 	// Create MCP server

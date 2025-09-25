@@ -33,61 +33,55 @@ const (
 	OutputFormatJSON OutputFormat = "json"
 )
 
-// SimpleCommand is a basic implementation of Command interface
-type SimpleCommand struct {
+// funcCommand is a basic implementation of Command interface
+type funcCommand struct {
 	flags        *FlagSet
 	handler      func(fs *FlagSet, args []string) error
 	usage        string
 	outputFormat OutputFormat
 }
 
-// NewSimpleCommand creates a new SimpleCommand
-func NewSimpleCommand(fs *FlagSet, handler func(fs *FlagSet, args []string) error) *SimpleCommand {
-	return &SimpleCommand{
+// CommandOption is a functional option for configuring a command
+type CommandOption func(*funcCommand)
+
+// WithUsage sets the usage description for the command
+func WithUsage(usage string) CommandOption {
+	return func(c *funcCommand) {
+		c.usage = usage
+	}
+}
+
+// WithOutputFormat sets the output format for the command
+func WithOutputFormat(format OutputFormat) CommandOption {
+	return func(c *funcCommand) {
+		c.outputFormat = format
+	}
+}
+
+// NewCommand creates a new command with the given options
+func NewCommand(fs *FlagSet, handler func(fs *FlagSet, args []string) error, opts ...CommandOption) Command {
+	c := &funcCommand{
 		flags:        fs,
 		handler:      handler,
 		usage:        "",
 		outputFormat: OutputFormatRaw, // Default to raw
 	}
-}
 
-// NewSimpleCommandWithUsage creates a new SimpleCommand with a usage description
-func NewSimpleCommandWithUsage(fs *FlagSet, handler func(fs *FlagSet, args []string) error, usage string) *SimpleCommand {
-	return &SimpleCommand{
-		flags:        fs,
-		handler:      handler,
-		usage:        usage,
-		outputFormat: OutputFormatRaw, // Default to raw
+	// Apply options
+	for _, opt := range opts {
+		opt(c)
 	}
-}
 
-// NewSimpleCommandWithFormat creates a new SimpleCommand with a specific output format
-func NewSimpleCommandWithFormat(fs *FlagSet, handler func(fs *FlagSet, args []string) error, format OutputFormat) *SimpleCommand {
-	return &SimpleCommand{
-		flags:        fs,
-		handler:      handler,
-		usage:        "",
-		outputFormat: format,
-	}
-}
-
-// NewSimpleCommandFull creates a new SimpleCommand with all options
-func NewSimpleCommandFull(fs *FlagSet, handler func(fs *FlagSet, args []string) error, usage string, format OutputFormat) *SimpleCommand {
-	return &SimpleCommand{
-		flags:        fs,
-		handler:      handler,
-		usage:        usage,
-		outputFormat: format,
-	}
+	return c
 }
 
 // FlagSet returns the flagset for this command
-func (c *SimpleCommand) FlagSet() *FlagSet {
+func (c *funcCommand) FlagSet() *FlagSet {
 	return c.flags
 }
 
 // Run executes the command
-func (c *SimpleCommand) Run(fs *FlagSet, args []string) error {
+func (c *funcCommand) Run(fs *FlagSet, args []string) error {
 	if c.handler != nil {
 		return c.handler(fs, args)
 	}
@@ -95,17 +89,17 @@ func (c *SimpleCommand) Run(fs *FlagSet, args []string) error {
 }
 
 // Usage returns the usage description for this command
-func (c *SimpleCommand) Usage() string {
+func (c *funcCommand) Usage() string {
 	return c.usage
 }
 
 // OutputFormat returns the output format for this command
-func (c *SimpleCommand) OutputFormat() OutputFormat {
+func (c *funcCommand) OutputFormat() OutputFormat {
 	return c.outputFormat
 }
 
 // SetOutputFormat sets the output format for this command
-func (c *SimpleCommand) SetOutputFormat(format OutputFormat) {
+func (c *funcCommand) SetOutputFormat(format OutputFormat) {
 	c.outputFormat = format
 }
 
@@ -153,25 +147,34 @@ func (d *Dispatcher) Execute(args []string) error {
 		return d.showHelp()
 	}
 
-	// Try to find the longest matching command
-	entry, remainingArgs := d.findCommand(args)
+	// Check for help flags anywhere in the arguments
+	hasHelp := false
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" || arg == "help" {
+			hasHelp = true
+			break
+		}
+	}
+
+	// Try to find the longest matching command, handling interspersed flags
+	entry, allArgs := d.findCommandWithInterspersedFlags(args)
 
 	if entry == nil {
 		// No command found, check for help flags
-		if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+		if hasHelp {
 			return d.showHelp()
 		}
 		return fmt.Errorf("unknown command: %s", strings.Join(args, " "))
 	}
 
-	// Check if help is requested for this specific command
-	if len(remainingArgs) > 0 && (remainingArgs[0] == "--help" || remainingArgs[0] == "-h") {
+	// If help is requested, show command-specific help
+	if hasHelp {
 		return d.showCommandHelp(entry)
 	}
 
 	// Parse flags for this command
 	fs := entry.Command.FlagSet()
-	if err := fs.Parse(remainingArgs); err != nil {
+	if err := fs.Parse(allArgs); err != nil {
 		return fmt.Errorf("error parsing flags: %w", err)
 	}
 
@@ -195,6 +198,148 @@ func (d *Dispatcher) findCommand(args []string) (*CommandEntry, []string) {
 	}
 
 	return nil, args
+}
+
+// findCommandWithInterspersedFlags finds a command while handling interspersed flags
+func (d *Dispatcher) findCommandWithInterspersedFlags(args []string) (*CommandEntry, []string) {
+	type flagInfo struct {
+		flag     string
+		value    string
+		hasValue bool
+		index    int // Track original position
+	}
+
+	// Track command parts and flags we encounter
+	var commandParts []string
+	var commandPartIndices []int // Track indices of command parts
+	var skippedItems []flagInfo
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+
+		// If this looks like a flag
+		if strings.HasPrefix(arg, "-") {
+			// Try to continue searching for command parts after this flag
+			// We'll tentatively assume this flag might take an argument
+
+			// Look ahead to see if there's a potential command part
+			nextIsCommand := false
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				// Check if adding the next non-flag argument would form a valid command
+				testParts := append(commandParts, args[i+1])
+				testPath := normalizeCommandPath(strings.Join(testParts, " "))
+
+				// Check if this forms a valid command or subcommand
+				for cmdPath := range d.commands {
+					if strings.HasPrefix(cmdPath, testPath) {
+						nextIsCommand = true
+						break
+					}
+				}
+			}
+
+			if nextIsCommand {
+				// The next argument is part of the command, so this flag has no argument
+				skippedItems = append(skippedItems, flagInfo{flag: arg, hasValue: false, index: i})
+				i++
+			} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				// The next argument might be a flag value
+				skippedItems = append(skippedItems, flagInfo{
+					flag:     arg,
+					value:    args[i+1],
+					hasValue: true,
+					index:    i,
+				})
+				i += 2
+			} else {
+				// Flag with no argument (at end or followed by another flag)
+				skippedItems = append(skippedItems, flagInfo{flag: arg, hasValue: false, index: i})
+				i++
+			}
+		} else {
+			// This is a potential command part
+			commandParts = append(commandParts, arg)
+			commandPartIndices = append(commandPartIndices, i)
+			i++
+		}
+	}
+
+	// Now try to find the longest matching command from the command parts we collected
+	for j := len(commandParts); j > 0; j-- {
+		testPath := normalizeCommandPath(strings.Join(commandParts[:j], " "))
+		if entry, ok := d.commands[testPath]; ok {
+			// We found a command! Now build the args for it
+			fs := entry.Command.FlagSet()
+
+			// Figure out where the command ends in the original args
+			lastCommandIndex := -1
+			if j > 0 && j <= len(commandPartIndices) {
+				lastCommandIndex = commandPartIndices[j-1]
+			}
+
+			// Build the full argument list for this command
+			// Include interspersed flags that came before the command and everything after
+			var fullArgs []string
+
+			// Add flags that were interspersed before/during the command
+			for _, fi := range skippedItems {
+				if fi.index <= lastCommandIndex {
+					fullArgs = append(fullArgs, fi.flag)
+					if fi.hasValue {
+						fullArgs = append(fullArgs, fi.value)
+					}
+				}
+			}
+
+			// Add everything after the command
+			if lastCommandIndex >= 0 && lastCommandIndex+1 < len(args) {
+				fullArgs = append(fullArgs, args[lastCommandIndex+1:]...)
+			}
+
+			// Try to validate our flag assumptions were correct
+			// Only validate flags that came before the command
+			valid := true
+			for _, fi := range skippedItems {
+				// Only check flags that came before the end of the command
+				if fi.index > lastCommandIndex {
+					continue // This flag is after the command, will be handled by Parse
+				}
+
+				flagName := strings.TrimPrefix(fi.flag, "--")
+				flagName = strings.TrimPrefix(flagName, "-")
+
+				// Check if this flag exists in the command's flagset
+				flagFound := false
+				fs.VisitAll(func(f *Flag) {
+					if (len(flagName) == 1 && f.Short == rune(flagName[0])) || f.Name == flagName {
+						flagFound = true
+						// Check if our assumption about the flag taking a value was correct
+						if fi.hasValue && f.Value.IsBool() {
+							valid = false // Bool flags don't take values
+						}
+					}
+				})
+
+				if !flagFound && !isHelpFlag(fi.flag) {
+					// Unknown flag (unless it's a help flag which is always valid)
+					valid = false
+				}
+			}
+
+			if valid {
+				return entry, fullArgs
+			}
+		}
+	}
+
+	// No valid command found
+	return nil, args
+}
+
+// isHelpFlag checks if a flag is a help flag
+func isHelpFlag(flag string) bool {
+	return flag == "-h" || flag == "--help"
 }
 
 // normalizeCommandPath normalizes a command path for consistent lookup

@@ -20,7 +20,7 @@ func TestDispatcherBasic(t *testing.T) {
 	var executed bool
 	var capturedArgs []string
 
-	cmd := NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		executed = true
 		capturedArgs = args
 		return nil
@@ -43,17 +43,17 @@ func TestDispatcherNestedCommands(t *testing.T) {
 	var executedCommand string
 
 	// Register nested commands
-	d.Dispatch("foo", NewSimpleCommand(NewFlagSet("foo"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("foo", NewCommand(NewFlagSet("foo"), func(fs *FlagSet, args []string) error {
 		executedCommand = "foo"
 		return nil
 	}))
 
-	d.Dispatch("foo bar", NewSimpleCommand(NewFlagSet("foo bar"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("foo bar", NewCommand(NewFlagSet("foo bar"), func(fs *FlagSet, args []string) error {
 		executedCommand = "foo bar"
 		return nil
 	}))
 
-	d.Dispatch("foo bar baz", NewSimpleCommand(NewFlagSet("foo bar baz"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("foo bar baz", NewCommand(NewFlagSet("foo bar baz"), func(fs *FlagSet, args []string) error {
 		executedCommand = "foo bar baz"
 		return nil
 	}))
@@ -90,7 +90,7 @@ func TestDispatcherWithFlags(t *testing.T) {
 		args     []string
 	}
 
-	cmd := NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
 		capturedFlags.output = *output
 		capturedFlags.optimize = *optimize
 		capturedFlags.jobs = *jobs
@@ -112,7 +112,7 @@ func TestDispatcherWithFlags(t *testing.T) {
 func TestDispatcherUnknownCommand(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("known", NewSimpleCommand(NewFlagSet("known"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("known", NewCommand(NewFlagSet("known"), func(fs *FlagSet, args []string) error {
 		return nil
 	}))
 
@@ -125,15 +125,15 @@ func TestDispatcherHelp(t *testing.T) {
 	d := NewDispatcher("myapp")
 
 	// Register some commands with usage
-	d.Dispatch("build", NewSimpleCommandWithUsage(NewFlagSet("build"),
+	d.Dispatch("build", NewCommand(NewFlagSet("build"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Build the project"))
+		WithUsage("Build the project")))
 
-	d.Dispatch("test", NewSimpleCommandWithUsage(NewFlagSet("test"),
+	d.Dispatch("test", NewCommand(NewFlagSet("test"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Run tests"))
+		WithUsage("Run tests")))
 
-	d.Dispatch("clean", NewSimpleCommand(NewFlagSet("clean"),
+	d.Dispatch("clean", NewCommand(NewFlagSet("clean"),
 		func(fs *FlagSet, args []string) error { return nil }))
 
 	// Capture stdout
@@ -168,9 +168,9 @@ func TestDispatcherCommandHelp(t *testing.T) {
 	fs.String("output", 'o', "a.out", "output file")
 	fs.Bool("verbose", 'v', false, "verbose output")
 
-	d.Dispatch("build", NewSimpleCommandWithUsage(fs,
+	d.Dispatch("build", NewCommand(fs,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Build the project with the specified options"))
+		WithUsage("Build the project with the specified options")))
 
 	// Capture stdout
 	old := os.Stdout
@@ -200,7 +200,7 @@ func TestDispatcherErrorHandling(t *testing.T) {
 	d := NewDispatcher("myapp")
 
 	// Register a command that returns an error
-	d.Dispatch("fail", NewSimpleCommand(NewFlagSet("fail"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("fail", NewCommand(NewFlagSet("fail"), func(fs *FlagSet, args []string) error {
 		return fmt.Errorf("command failed")
 	}))
 
@@ -215,7 +215,7 @@ func TestDispatcherFlagParsingError(t *testing.T) {
 	fs := NewFlagSet("test")
 	fs.Int("count", 'c', 0, "count value")
 
-	d.Dispatch("test", NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	d.Dispatch("test", NewCommand(fs, func(flags *FlagSet, args []string) error {
 		return nil
 	}))
 
@@ -235,7 +235,7 @@ func TestDispatcherNormalizeCommandPath(t *testing.T) {
 	}
 
 	// Register with extra spaces
-	d.Dispatch("  foo   bar  ", NewSimpleCommand(NewFlagSet("test"), handler))
+	d.Dispatch("  foo   bar  ", NewCommand(NewFlagSet("test"), handler))
 
 	// Should work with normalized path
 	executed = false
@@ -256,7 +256,7 @@ func TestDispatcherGetCommand(t *testing.T) {
 	fs := NewFlagSet("test")
 	handler := func(fs *FlagSet, args []string) error { return nil }
 
-	d.Dispatch("foo bar", NewSimpleCommandWithUsage(fs, handler, "test command"))
+	d.Dispatch("foo bar", NewCommand(fs, handler, WithUsage("test command")))
 
 	// Get existing command
 	cmd := d.GetCommand("foo bar")
@@ -277,7 +277,7 @@ func TestDispatcherGetCommand(t *testing.T) {
 func TestDispatcherHasCommand(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("exists", NewSimpleCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("exists", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
 		return nil
 	}))
 
@@ -288,7 +288,7 @@ func TestDispatcherHasCommand(t *testing.T) {
 func TestDispatcherRemove(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("temp", NewSimpleCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("temp", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
 		return nil
 	}))
 
@@ -307,9 +307,9 @@ func TestDispatcherRemove(t *testing.T) {
 func TestDispatcherGetCommands(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("cmd1", NewSimpleCommand(NewFlagSet("test1"), func(fs *FlagSet, args []string) error { return nil }))
-	d.Dispatch("cmd2", NewSimpleCommand(NewFlagSet("test2"), func(fs *FlagSet, args []string) error { return nil }))
-	d.Dispatch("cmd3", NewSimpleCommand(NewFlagSet("test3"), func(fs *FlagSet, args []string) error { return nil }))
+	d.Dispatch("cmd1", NewCommand(NewFlagSet("test1"), func(fs *FlagSet, args []string) error { return nil }))
+	d.Dispatch("cmd2", NewCommand(NewFlagSet("test2"), func(fs *FlagSet, args []string) error { return nil }))
+	d.Dispatch("cmd3", NewCommand(NewFlagSet("test3"), func(fs *FlagSet, args []string) error { return nil }))
 
 	commands := d.GetCommands()
 	assert.Len(t, commands, 3)
@@ -322,7 +322,7 @@ func TestDispatcherRunAlias(t *testing.T) {
 	d := NewDispatcher("myapp")
 
 	var executed bool
-	d.Dispatch("test", NewSimpleCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("test", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
 		executed = true
 		return nil
 	}))
@@ -336,7 +336,7 @@ func TestDispatcherRunAlias(t *testing.T) {
 func TestDispatcherEmptyArgs(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("test", NewSimpleCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("test", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
 		return nil
 	}))
 
@@ -371,7 +371,7 @@ func TestDispatcherWithStructFlags(t *testing.T) {
 	err := fs.FromStruct(config)
 	assert.NoError(t, err)
 
-	d.Dispatch("process", NewSimpleCommand(fs, func(flags *FlagSet, args []string) error {
+	d.Dispatch("process", NewCommand(fs, func(flags *FlagSet, args []string) error {
 		// Handler can access config directly since it's been parsed
 		return nil
 	}))
@@ -387,7 +387,7 @@ func TestDispatcherMultiWordCommandWithArgs(t *testing.T) {
 	d := NewDispatcher("myapp")
 
 	var capturedArgs []string
-	d.Dispatch("foo bar baz", NewSimpleCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("foo bar baz", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
 		capturedArgs = args
 		return nil
 	}))
@@ -400,18 +400,18 @@ func TestDispatcherMultiWordCommandWithArgs(t *testing.T) {
 func TestDispatcherGetCommandCompletions(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("build", NewSimpleCommandWithUsage(NewFlagSet("build"),
+	d.Dispatch("build", NewCommand(NewFlagSet("build"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Build the project"))
-	d.Dispatch("test", NewSimpleCommandWithUsage(NewFlagSet("test"),
+		WithUsage("Build the project")))
+	d.Dispatch("test", NewCommand(NewFlagSet("test"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Run tests"))
-	d.Dispatch("test unit", NewSimpleCommandWithUsage(NewFlagSet("test unit"),
+		WithUsage("Run tests")))
+	d.Dispatch("test unit", NewCommand(NewFlagSet("test unit"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Run unit tests"))
-	d.Dispatch("test integration", NewSimpleCommandWithUsage(NewFlagSet("test integration"),
+		WithUsage("Run unit tests")))
+	d.Dispatch("test integration", NewCommand(NewFlagSet("test integration"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Run integration tests"))
+		WithUsage("Run integration tests")))
 
 	tests := []struct {
 		name     string
@@ -465,9 +465,9 @@ func TestDispatcherGetCommandCompletions(t *testing.T) {
 func TestDispatcherHandleCompletion(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("build", NewSimpleCommand(NewFlagSet("build"),
+	d.Dispatch("build", NewCommand(NewFlagSet("build"),
 		func(fs *FlagSet, args []string) error { return nil }))
-	d.Dispatch("test", NewSimpleCommand(NewFlagSet("test"),
+	d.Dispatch("test", NewCommand(NewFlagSet("test"),
 		func(fs *FlagSet, args []string) error { return nil }))
 
 	tests := []struct {
@@ -530,10 +530,10 @@ func TestDispatcherBashCompletions(t *testing.T) {
 	fs.Bool("verbose", 'v', false, "verbose output")
 	fs.String("output", 'o', "a.out", "output file")
 
-	d.Dispatch("build", NewSimpleCommandWithUsage(fs,
+	d.Dispatch("build", NewCommand(fs,
 		func(flags *FlagSet, args []string) error { return nil },
-		"Build the project"))
-	d.Dispatch("test", NewSimpleCommand(NewFlagSet("test"),
+		WithUsage("Build the project")))
+	d.Dispatch("test", NewCommand(NewFlagSet("test"),
 		func(fs *FlagSet, args []string) error { return nil }))
 
 	// Capture stdout
@@ -559,9 +559,9 @@ func TestDispatcherBashCompletions(t *testing.T) {
 func TestDispatcherGenerateCompletionScripts(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	d.Dispatch("build", NewSimpleCommandWithUsage(NewFlagSet("build"),
+	d.Dispatch("build", NewCommand(NewFlagSet("build"),
 		func(fs *FlagSet, args []string) error { return nil },
-		"Build the project"))
+		WithUsage("Build the project")))
 
 	// Test bash completion script generation
 	bashScript := d.GenerateBashCompletion()
@@ -574,4 +574,198 @@ func TestDispatcherGenerateCompletionScripts(t *testing.T) {
 	assert.Contains(t, zshScript, "#compdef myapp")
 	assert.Contains(t, zshScript, "_myapp()")
 	assert.Contains(t, zshScript, "build[Build the project]")
+}
+
+func TestDispatcherHelpWithInterspersedFlags(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Create nested command "foo bar" with its own flags
+	barFs := NewFlagSet("bar")
+	barVerbose := barFs.Bool("verbose", 'v', false, "verbose output")
+	config := barFs.String("config", 'C', "", "config file path")
+
+	d.Dispatch("foo bar", NewCommand(barFs,
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Execute the bar subcommand")))
+
+	// Test various patterns of interspersed flags with help
+	tests := []struct {
+		name        string
+		args        []string
+		shouldHelp  bool
+		description string
+	}{
+		{
+			name:        "help after flag with arg",
+			args:        []string{"foo", "-C", "local", "bar", "-h"},
+			shouldHelp:  true,
+			description: "Should show help even when -C flag with argument comes before command",
+		},
+		{
+			name:        "help after flag with arg using --help",
+			args:        []string{"foo", "-C", "local", "bar", "--help"},
+			shouldHelp:  true,
+			description: "Should show help with --help after flag with argument",
+		},
+		{
+			name:        "help in middle of command path",
+			args:        []string{"foo", "-h", "bar"},
+			shouldHelp:  true,
+			description: "Should show help when -h appears in middle of command path",
+		},
+		{
+			name:        "help after multiple flags",
+			args:        []string{"foo", "-C", "config.yml", "bar", "-v", "-h"},
+			shouldHelp:  true,
+			description: "Should show help even with multiple flags before it",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Capture stdout
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			err := d.Execute(test.args)
+
+			w.Close()
+			os.Stdout = old
+
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			output := buf.String()
+
+			if test.shouldHelp {
+				assert.NoError(t, err, test.description)
+				// Check that help output was shown
+				assert.Contains(t, output, "Usage:", test.description)
+				// For the "foo bar" command specifically
+				assert.Contains(t, output, "Execute the bar subcommand", test.description)
+			}
+		})
+	}
+
+	// Also test that without help flag, the command executes normally
+	t.Run("normal execution without help", func(t *testing.T) {
+		var executed bool
+		d.Dispatch("foo bar", NewCommand(barFs,
+			func(fs *FlagSet, args []string) error {
+				executed = true
+				return nil
+			},
+			WithUsage("Execute the bar subcommand")))
+
+		err := d.Execute([]string{"foo", "-C", "local", "bar", "-v"})
+		assert.NoError(t, err)
+		assert.True(t, executed)
+		assert.True(t, *barVerbose)
+		assert.Equal(t, "local", *config)
+	})
+}
+
+func TestDispatcherFlagsAfterPositionalArgs(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Create command "foo bar" with flags and positional arguments
+	fs := NewFlagSet("foo bar")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+	output := fs.String("output", 'o', "default.txt", "output file")
+
+	var capturedArgs []string
+	var executed bool
+
+	d.Dispatch("foo bar", NewCommand(fs,
+		func(flags *FlagSet, args []string) error {
+			executed = true
+			capturedArgs = args
+			return nil
+		},
+		WithUsage("Process files with options")))
+
+	tests := []struct {
+		name          string
+		args          []string
+		expectHelp    bool
+		expectArgs    []string
+		expectVerbose bool
+		expectOutput  string
+		description   string
+	}{
+		{
+			name:        "help after positional arg",
+			args:        []string{"foo", "bar", "baz", "-h"},
+			expectHelp:  true,
+			description: "Should show help when -h comes after positional arg 'baz'",
+		},
+		{
+			name:        "help after multiple positional args",
+			args:        []string{"foo", "bar", "file1", "file2", "--help"},
+			expectHelp:  true,
+			description: "Should show help when --help comes after multiple positional args",
+		},
+		{
+			name:          "flags after positional arg",
+			args:          []string{"foo", "bar", "myfile", "-v", "--output", "result.txt"},
+			expectArgs:    []string{"myfile"},
+			expectVerbose: true,
+			expectOutput:  "result.txt",
+			description:   "Should parse flags that come after positional arguments",
+		},
+		{
+			name:          "mixed positional and flags",
+			args:          []string{"foo", "bar", "file1", "-v", "file2", "--output", "out.txt", "file3"},
+			expectArgs:    []string{"file1", "file2", "file3"},
+			expectVerbose: true,
+			expectOutput:  "out.txt",
+			description:   "Should handle mixed positional args and flags",
+		},
+		{
+			name:          "positional arg named like subcommand",
+			args:          []string{"foo", "bar", "baz", "-v"},
+			expectArgs:    []string{"baz"},
+			expectVerbose: true,
+			expectOutput:  "default.txt",
+			description:   "Should treat 'baz' as positional arg, not a subcommand",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Reset state
+			executed = false
+			capturedArgs = nil
+			*verbose = false
+			*output = "default.txt"
+
+			if test.expectHelp {
+				// Capture stdout for help output
+				old := os.Stdout
+				r, w, _ := os.Pipe()
+				os.Stdout = w
+
+				err := d.Execute(test.args)
+
+				w.Close()
+				os.Stdout = old
+
+				var buf bytes.Buffer
+				io.Copy(&buf, r)
+				output := buf.String()
+
+				assert.NoError(t, err, test.description)
+				assert.Contains(t, output, "Usage:", test.description)
+				assert.Contains(t, output, "Process files with options", test.description)
+				assert.False(t, executed, "Command should not execute when help is shown")
+			} else {
+				err := d.Execute(test.args)
+				assert.NoError(t, err, test.description)
+				assert.True(t, executed, "Command should execute")
+				assert.Equal(t, test.expectArgs, capturedArgs, test.description)
+				assert.Equal(t, test.expectVerbose, *verbose, test.description)
+				assert.Equal(t, test.expectOutput, *output, test.description)
+			}
+		})
+	}
 }
