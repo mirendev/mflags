@@ -1033,3 +1033,74 @@ func TestNegativePositionTag(t *testing.T) {
 
 	assert.Equal(t, "", config.Item) // Field is ignored due to negative position
 }
+
+type DatabaseConfig struct {
+	Host string `long:"db-host" default:"localhost" usage:"Database host"`
+	Port int    `long:"db-port" default:"5432" usage:"Database port"`
+}
+
+type ServerConfig struct {
+	Port    int  `long:"server-port" short:"p" default:"8080" usage:"Server port"`
+	Verbose bool `long:"verbose" short:"v" usage:"Enable verbose logging"`
+}
+
+type EmbeddedConfig struct {
+	DatabaseConfig
+	ServerConfig
+	AppName string `long:"app-name" short:"a" default:"myapp" usage:"Application name"`
+}
+
+func TestFromStructEmbedded(t *testing.T) {
+	config := &EmbeddedConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{
+		"--db-host", "db.example.com",
+		"--db-port", "3306",
+		"--server-port", "9000",
+		"--verbose",
+		"--app-name", "testapp",
+	})
+	assert.NoError(t, err)
+
+	assert.Equal(t, "db.example.com", config.Host)
+	assert.Equal(t, 3306, config.DatabaseConfig.Port)
+	assert.Equal(t, 9000, config.ServerConfig.Port)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, "testapp", config.AppName)
+}
+
+func TestFromStructEmbeddedDefaults(t *testing.T) {
+	config := &EmbeddedConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{})
+	assert.NoError(t, err)
+
+	assert.Equal(t, "localhost", config.Host)
+	assert.Equal(t, 5432, config.DatabaseConfig.Port)
+	assert.Equal(t, 8080, config.ServerConfig.Port)
+	assert.False(t, config.Verbose)
+	assert.Equal(t, "myapp", config.AppName)
+}
+
+func TestFromStructEmbeddedShortFlags(t *testing.T) {
+	config := &EmbeddedConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"-p", "7000", "-v", "-a", "shortapp"})
+	assert.NoError(t, err)
+
+	assert.Equal(t, 7000, config.ServerConfig.Port)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, "shortapp", config.AppName)
+}

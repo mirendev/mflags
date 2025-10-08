@@ -552,6 +552,14 @@ func (f *FlagSet) FromStruct(v any) error {
 			continue
 		}
 
+		// Check for anonymous/embedded struct fields and descend into them
+		if field.Anonymous && field.Type.Kind() == reflect.Struct {
+			if err := f.FromStruct(fieldValue.Addr().Interface()); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Check for "position" tag - capture positional argument
 		if posStr := field.Tag.Get("position"); posStr != "" {
 			pos, err := strconv.Atoi(posStr)
