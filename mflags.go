@@ -137,6 +137,8 @@ func (d *durationValue) IsBool() bool {
 	return false
 }
 
+// NewFlagSet returns a new, empty flag set with the specified name.
+// The name is used for error messages and help output.
 func NewFlagSet(name string) *FlagSet {
 	return &FlagSet{
 		name:      name,
@@ -146,39 +148,54 @@ func NewFlagSet(name string) *FlagSet {
 	}
 }
 
+// BoolVar defines a bool flag with the specified name, short form, default value, and usage string.
+// The argument p points to a bool variable in which to store the value of the flag.
 func (f *FlagSet) BoolVar(p *bool, name string, short rune, value bool, usage string) {
 	f.Var((*boolValue)(p), name, short, usage)
 	*p = value
 }
 
+// Bool defines a bool flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a bool variable that stores the value of the flag.
 func (f *FlagSet) Bool(name string, short rune, value bool, usage string) *bool {
 	p := new(bool)
 	f.BoolVar(p, name, short, value, usage)
 	return p
 }
 
+// StringVar defines a string flag with the specified name, short form, default value, and usage string.
+// The argument p points to a string variable in which to store the value of the flag.
 func (f *FlagSet) StringVar(p *string, name string, short rune, value string, usage string) {
 	f.Var((*stringValue)(p), name, short, usage)
 	*p = value
 }
 
+// String defines a string flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a string variable that stores the value of the flag.
 func (f *FlagSet) String(name string, short rune, value string, usage string) *string {
 	p := new(string)
 	f.StringVar(p, name, short, value, usage)
 	return p
 }
 
+// IntVar defines an int flag with the specified name, short form, default value, and usage string.
+// The argument p points to an int variable in which to store the value of the flag.
 func (f *FlagSet) IntVar(p *int, name string, short rune, value int, usage string) {
 	f.Var((*intValue)(p), name, short, usage)
 	*p = value
 }
 
+// Int defines an int flag with the specified name, short form, default value, and usage string.
+// The return value is the address of an int variable that stores the value of the flag.
 func (f *FlagSet) Int(name string, short rune, value int, usage string) *int {
 	p := new(int)
 	f.IntVar(p, name, short, value, usage)
 	return p
 }
 
+// StringArrayVar defines a string array flag with the specified name, short form, default value, and usage string.
+// The argument p points to a []string variable in which to store the value of the flag.
+// The flag value is expected to be a comma-separated list of strings.
 func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []string, usage string) {
 	f.Var((*stringArrayValue)(p), name, short, usage)
 	if value != nil {
@@ -188,25 +205,35 @@ func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []s
 	}
 }
 
+// StringArray defines a string array flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a []string variable that stores the value of the flag.
+// The flag value is expected to be a comma-separated list of strings.
 func (f *FlagSet) StringArray(name string, short rune, value []string, usage string) *[]string {
 	p := new([]string)
 	f.StringArrayVar(p, name, short, value, usage)
 	return p
 }
 
+// DurationVar defines a time.Duration flag with the specified name, short form, default value, and usage string.
+// The argument p points to a time.Duration variable in which to store the value of the flag.
+// The flag accepts values parseable by time.ParseDuration.
 func (f *FlagSet) DurationVar(p *time.Duration, name string, short rune, value time.Duration, usage string) {
 	f.Var((*durationValue)(p), name, short, usage)
 	*p = value
 }
 
+// Duration defines a time.Duration flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a time.Duration variable that stores the value of the flag.
+// The flag accepts values parseable by time.ParseDuration.
 func (f *FlagSet) Duration(name string, short rune, value time.Duration, usage string) *time.Duration {
 	p := new(time.Duration)
 	f.DurationVar(p, name, short, value, usage)
 	return p
 }
 
-// Positional argument methods
-
+// BoolPosVar defines a bool positional argument at the specified position with a default value and usage string.
+// The argument p points to a bool variable in which to store the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) BoolPosVar(p *bool, name string, position int, value bool, usage string) {
 	*p = value
 	f.posFields[position] = &PositionalField{
@@ -216,12 +243,18 @@ func (f *FlagSet) BoolPosVar(p *bool, name string, position int, value bool, usa
 	}
 }
 
+// BoolPos defines a bool positional argument at the specified position with a default value and usage string.
+// The return value is the address of a bool variable that stores the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) BoolPos(name string, position int, value bool, usage string) *bool {
 	p := new(bool)
 	f.BoolPosVar(p, name, position, value, usage)
 	return p
 }
 
+// StringPosVar defines a string positional argument at the specified position with a default value and usage string.
+// The argument p points to a string variable in which to store the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) StringPosVar(p *string, name string, position int, value string, usage string) {
 	*p = value
 	f.posFields[position] = &PositionalField{
@@ -231,12 +264,18 @@ func (f *FlagSet) StringPosVar(p *string, name string, position int, value strin
 	}
 }
 
+// StringPos defines a string positional argument at the specified position with a default value and usage string.
+// The return value is the address of a string variable that stores the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) StringPos(name string, position int, value string, usage string) *string {
 	p := new(string)
 	f.StringPosVar(p, name, position, value, usage)
 	return p
 }
 
+// IntPosVar defines an int positional argument at the specified position with a default value and usage string.
+// The argument p points to an int variable in which to store the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) IntPosVar(p *int, name string, position int, value int, usage string) {
 	*p = value
 	f.posFields[position] = &PositionalField{
@@ -246,12 +285,18 @@ func (f *FlagSet) IntPosVar(p *int, name string, position int, value int, usage 
 	}
 }
 
+// IntPos defines an int positional argument at the specified position with a default value and usage string.
+// The return value is the address of an int variable that stores the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) IntPos(name string, position int, value int, usage string) *int {
 	p := new(int)
 	f.IntPosVar(p, name, position, value, usage)
 	return p
 }
 
+// DurationPosVar defines a time.Duration positional argument at the specified position with a default value and usage string.
+// The argument p points to a time.Duration variable in which to store the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) DurationPosVar(p *time.Duration, name string, position int, value time.Duration, usage string) {
 	*p = value
 	f.posFields[position] = &PositionalField{
@@ -261,14 +306,18 @@ func (f *FlagSet) DurationPosVar(p *time.Duration, name string, position int, va
 	}
 }
 
+// DurationPos defines a time.Duration positional argument at the specified position with a default value and usage string.
+// The return value is the address of a time.Duration variable that stores the value of the positional argument.
+// Position 0 is the first non-flag argument, position 1 is the second, etc.
 func (f *FlagSet) DurationPos(name string, position int, value time.Duration, usage string) *time.Duration {
 	p := new(time.Duration)
 	f.DurationPosVar(p, name, position, value, usage)
 	return p
 }
 
-// Rest arguments method
-
+// Rest defines a slice to capture all remaining non-flag arguments.
+// The argument p points to a []string variable that will be populated with all non-flag arguments.
+// This is useful for commands that accept variable-length argument lists.
 func (f *FlagSet) Rest(p *[]string, usage string) {
 	if p == nil {
 		panic("Rest: pointer cannot be nil")
@@ -277,6 +326,9 @@ func (f *FlagSet) Rest(p *[]string, usage string) {
 	f.restField = p
 }
 
+// Var defines a flag with the specified name, short form, and usage string.
+// The type and value of the flag are represented by the first argument, of type Value,
+// which typically holds a user-defined implementation of Value.
 func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 	flag := &Flag{
 		Name:     name,
@@ -347,6 +399,10 @@ func (f *FlagSet) GetPositionalFields() []*PositionalField {
 	return result
 }
 
+// Parse parses flag and positional argument definitions from the argument list,
+// which should not include the command name. Must be called after all flags are defined
+// and before flags are accessed by the program.
+// The return value will be ErrHelp if -help or -h were set but not defined.
 func (f *FlagSet) Parse(arguments []string) error {
 	f.parsed = true
 	f.args = nil
@@ -498,10 +554,12 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 	return nil
 }
 
+// Args returns the non-flag arguments.
 func (f *FlagSet) Args() []string {
 	return f.args
 }
 
+// Parsed reports whether f.Parse has been called.
 func (f *FlagSet) Parsed() bool {
 	return f.parsed
 }
@@ -563,7 +621,18 @@ func setFieldValue(fieldValue reflect.Value, value string) error {
 	return nil
 }
 
-// FromStruct creates flag definitions from a struct's fields using struct tags
+// FromStruct creates flag definitions from a struct's fields using struct tags.
+// The argument must be a pointer to a struct. Struct tags control how fields are parsed:
+//   - `long:"name"` - long flag name (defaults to lowercase field name)
+//   - `short:"x"` - short flag name (single character)
+//   - `default:"value"` - default value for the flag
+//   - `usage:"description"` - usage description
+//   - `position:"0"` - positional argument at index 0
+//   - `rest:"true"` - capture all remaining arguments in a []string field
+//   - `unknown:"true"` - capture unknown flags in a []string field (automatically enables AllowUnknownFlags)
+//
+// Supports bool, string, int, []string, and time.Duration field types.
+// Anonymous embedded structs are recursively processed.
 func (f *FlagSet) FromStruct(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
@@ -690,7 +759,9 @@ func (f *FlagSet) FromStruct(v any) error {
 	return nil
 }
 
-// ParseStruct parses command line arguments and updates the struct fields
+// ParseStruct parses command line arguments and updates the struct fields.
+// This is a convenience function that creates a FlagSet, calls FromStruct, and parses the arguments.
+// See FromStruct for documentation on supported struct tags and field types.
 func ParseStruct(v any, arguments []string) error {
 	fs := NewFlagSet("")
 	if err := fs.FromStruct(v); err != nil {
