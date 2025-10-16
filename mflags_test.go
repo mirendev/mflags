@@ -1104,3 +1104,358 @@ func TestFromStructEmbeddedShortFlags(t *testing.T) {
 	assert.True(t, config.Verbose)
 	assert.Equal(t, "shortapp", config.AppName)
 }
+
+// Tests for AllowUnknownFlags feature
+
+func TestAllowUnknownFlagsLong(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--verbose", "--unknown", "--another"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"--unknown", "--another"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsLongWithValue(t *testing.T) {
+	fs := NewFlagSet("test")
+	name := fs.String("name", 'n', "default", "name to use")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--name", "test", "--unknown", "value"})
+	assert.NoError(t, err)
+	assert.Equal(t, "test", *name)
+	assert.Equal(t, []string{"--unknown", "value"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsLongWithEquals(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--verbose", "--unknown=value", "--another=test"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"--unknown=value", "--another=test"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsShort(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"-v", "-x", "-y"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"-x", "-y"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsShortWithValue(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"-v", "-x", "value1", "-y", "value2"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"-x", "value1", "-y", "value2"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsShortWithImmediateValue(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"-v", "-xvalue"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"-xvalue"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsMixed(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+	name := fs.String("name", 'n', "default", "name to use")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"-v", "--name", "test", "--unknown1", "arg1", "-x", "--unknown2=val", "arg2"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, "test", *name)
+	// Once unknown flag is encountered, everything after is accumulated
+	assert.Equal(t, []string{"--unknown1", "arg1", "-x", "--unknown2=val", "arg2"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsDisabled(t *testing.T) {
+	fs := NewFlagSet("test")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	// Default behavior - should error on unknown flags
+	fs.AllowUnknownFlags(false)
+
+	err := fs.Parse([]string{"--unknown"})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrUnknownFlag)
+	assert.Empty(t, fs.UnknownFlags())
+}
+
+func TestAllowUnknownFlagsWithArgs(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--verbose", "--unknown", "arg1", "arg2"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	// Once unknown flag is encountered, everything after is accumulated
+	assert.Equal(t, []string{"--unknown", "arg1", "arg2"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsAfterDoubleHyphen(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--verbose", "--unknown", "--", "--another-unknown"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	// Once unknown flag is encountered, everything after is accumulated (including --)
+	assert.Equal(t, []string{"--unknown", "--", "--another-unknown"}, fs.UnknownFlags())
+	assert.Empty(t, fs.Args())
+}
+
+func TestAllowUnknownFlagsMultipleParseCalls(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	// First parse
+	err := fs.Parse([]string{"--verbose", "--unknown1"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Equal(t, []string{"--unknown1"}, fs.UnknownFlags())
+
+	// Second parse - unknownFlags should be reset
+	err = fs.Parse([]string{"--unknown2", "--unknown3"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"--unknown2", "--unknown3"}, fs.UnknownFlags())
+}
+
+func TestAllowUnknownFlagsEmpty(t *testing.T) {
+	fs := NewFlagSet("test")
+	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+
+	fs.AllowUnknownFlags(true)
+
+	err := fs.Parse([]string{"--verbose"})
+	assert.NoError(t, err)
+	assert.True(t, *verbose)
+	assert.Empty(t, fs.UnknownFlags())
+}
+
+func TestAllowUnknownFlagsWithPositional(t *testing.T) {
+	type Config struct {
+		Command string `position:"0"`
+		Verbose bool   `long:"verbose" short:"v"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	fs.AllowUnknownFlags(true)
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"run", "--verbose", "--unknown", "value"})
+	assert.NoError(t, err)
+	assert.Equal(t, "run", config.Command)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, []string{"--unknown", "value"}, fs.UnknownFlags())
+}
+
+func TestAllowUnknownFlagsWithRest(t *testing.T) {
+	type Config struct {
+		Verbose bool     `long:"verbose" short:"v"`
+		Files   []string `rest:"true"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	fs.AllowUnknownFlags(true)
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--verbose", "--unknown", "file1.txt", "file2.txt"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	// Once unknown flag is encountered, everything after is accumulated
+	assert.Equal(t, []string{"--unknown", "file1.txt", "file2.txt"}, fs.UnknownFlags())
+	assert.Empty(t, config.Files)
+}
+
+// Tests for struct-based unknown flag handling
+
+func TestStructUnknownTag(t *testing.T) {
+	type Config struct {
+		Verbose      bool     `long:"verbose" short:"v"`
+		Name         string   `long:"name" short:"n"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--verbose", "--name", "test", "--unknown1", "value", "-x"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, "test", config.Name)
+	assert.Equal(t, []string{"--unknown1", "value", "-x"}, config.UnknownFlags)
+}
+
+func TestStructUnknownTagEmpty(t *testing.T) {
+	type Config struct {
+		Verbose      bool     `long:"verbose" short:"v"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--verbose"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	assert.Empty(t, config.UnknownFlags)
+}
+
+func TestStructUnknownTagWithPositional(t *testing.T) {
+	type Config struct {
+		Command      string   `position:"0"`
+		Verbose      bool     `long:"verbose" short:"v"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"run", "--verbose", "--unknown", "value"})
+	assert.NoError(t, err)
+	assert.Equal(t, "run", config.Command)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, []string{"--unknown", "value"}, config.UnknownFlags)
+}
+
+func TestStructUnknownTagWithRest(t *testing.T) {
+	type Config struct {
+		Verbose      bool     `long:"verbose" short:"v"`
+		Files        []string `rest:"true"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--verbose", "--unknown", "file1.txt", "file2.txt"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, []string{"--unknown", "file1.txt", "file2.txt"}, config.UnknownFlags)
+	// Rest field is empty because everything after --unknown goes to unknown flags
+	assert.Empty(t, config.Files)
+}
+
+func TestStructUnknownTagMultipleUnknownFlags(t *testing.T) {
+	type Config struct {
+		Debug        bool     `long:"debug" short:"d"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--debug", "--unknown1", "--unknown2=val", "-x", "arg"})
+	assert.NoError(t, err)
+	assert.True(t, config.Debug)
+	assert.Equal(t, []string{"--unknown1", "--unknown2=val", "-x", "arg"}, config.UnknownFlags)
+}
+
+func TestStructUnknownTagOnlyUnknownFlags(t *testing.T) {
+	type Config struct {
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--unknown1", "value", "--unknown2"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"--unknown1", "value", "--unknown2"}, config.UnknownFlags)
+}
+
+func TestStructUnknownTagWithDoubleHyphen(t *testing.T) {
+	type Config struct {
+		Verbose      bool     `long:"verbose" short:"v"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--verbose", "--unknown", "--", "arg1", "arg2"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, []string{"--unknown", "--", "arg1", "arg2"}, config.UnknownFlags)
+}
+
+func TestStructInvalidUnknownFieldType(t *testing.T) {
+	type Config struct {
+		Verbose      bool   `long:"verbose" short:"v"`
+		UnknownFlags string `unknown:"true"` // Invalid: not []string
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err) // Should not error, just ignore the invalid unknown field
+
+	// allowUnknownFlags should NOT be set because the field type is wrong
+	err = fs.Parse([]string{"--verbose", "--unknown"})
+	assert.Error(t, err) // Should error because unknown flag handling is not enabled
+	assert.ErrorIs(t, err, ErrUnknownFlag)
+}
+
+func TestStructUnknownTagWithEmbedded(t *testing.T) {
+	type BaseConfig struct {
+		Verbose bool `long:"verbose" short:"v"`
+	}
+
+	type ExtendedConfig struct {
+		BaseConfig
+		Name         string   `long:"name" short:"n"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &ExtendedConfig{}
+	err := ParseStruct(config, []string{"-v", "--name", "test", "--unknown", "value"})
+	assert.NoError(t, err)
+	assert.True(t, config.Verbose)
+	assert.Equal(t, "test", config.Name)
+	assert.Equal(t, []string{"--unknown", "value"}, config.UnknownFlags)
+}
+
+func TestStructUnknownTagBeforeKnownFlags(t *testing.T) {
+	type Config struct {
+		Name         string   `long:"name" short:"n"`
+		UnknownFlags []string `unknown:"true"`
+	}
+
+	config := &Config{}
+	err := ParseStruct(config, []string{"--unknown", "value", "--name", "test"})
+	assert.NoError(t, err)
+	assert.Equal(t, "", config.Name) // name flag is after unknown, so not processed
+	assert.Equal(t, []string{"--unknown", "value", "--name", "test"}, config.UnknownFlags)
+}

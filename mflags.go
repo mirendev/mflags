@@ -24,13 +24,16 @@ type PositionalField struct {
 }
 
 type FlagSet struct {
-	name      string
-	flags     map[string]*Flag
-	shortMap  map[rune]*Flag
-	args      []string
-	parsed    bool
-	restField *[]string                // Pointer to field marked with "rest" tag
-	posFields map[int]*PositionalField // Map of position to positional field info
+	name              string
+	flags             map[string]*Flag
+	shortMap          map[rune]*Flag
+	args              []string
+	parsed            bool
+	restField         *[]string                // Pointer to field marked with "rest" tag
+	posFields         map[int]*PositionalField // Map of position to positional field info
+	allowUnknownFlags bool                     // If true, accumulate unknown flags instead of erroring
+	unknownFlags      []string                 // Accumulated unknown flags when allowUnknownFlags is true
+	unknownField      *[]string                // Pointer to field marked with "unknown" tag
 }
 
 type Flag struct {
@@ -347,6 +350,7 @@ func (f *FlagSet) GetPositionalFields() []*PositionalField {
 func (f *FlagSet) Parse(arguments []string) error {
 	f.parsed = true
 	f.args = nil
+	f.unknownFlags = nil
 
 	for i := 0; i < len(arguments); i++ {
 		arg := arguments[i]
@@ -392,6 +396,11 @@ func (f *FlagSet) Parse(arguments []string) error {
 		*f.restField = f.args
 	}
 
+	// If we have an unknown field, populate it with unknown flags
+	if f.unknownField != nil {
+		*f.unknownField = f.unknownFlags
+	}
+
 	return nil
 }
 
@@ -408,6 +417,12 @@ func (f *FlagSet) parseLongFlag(name string, args []string, index *int) (bool, e
 
 	flag, ok := f.flags[name]
 	if !ok {
+		if f.allowUnknownFlags {
+			// Unknown flag encountered - accumulate this and all remaining args
+			f.unknownFlags = append(f.unknownFlags, args[*index:]...)
+			*index = len(args) - 1 // Skip to end
+			return true, nil
+		}
 		return false, fmt.Errorf("%w: --%s", ErrUnknownFlag, name)
 	}
 
@@ -439,6 +454,12 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 		r := runes[i]
 		flag, ok := f.shortMap[r]
 		if !ok {
+			if f.allowUnknownFlags {
+				// Unknown flag encountered - accumulate this and all remaining args
+				f.unknownFlags = append(f.unknownFlags, args[*index:]...)
+				*index = len(args) - 1 // Skip to end
+				return nil
+			}
 			return fmt.Errorf("%w: -%c", ErrUnknownFlag, r)
 		}
 
@@ -483,6 +504,20 @@ func (f *FlagSet) Args() []string {
 
 func (f *FlagSet) Parsed() bool {
 	return f.parsed
+}
+
+// AllowUnknownFlags enables or disables accumulation of unknown flags.
+// When enabled, unknown flags will not cause an error but will be accumulated
+// and can be retrieved via UnknownFlags().
+func (f *FlagSet) AllowUnknownFlags(allow bool) {
+	f.allowUnknownFlags = allow
+}
+
+// UnknownFlags returns the list of unknown flags encountered during parsing.
+// This is only populated when AllowUnknownFlags(true) has been called.
+// Each entry includes the flag as it appeared (e.g., "--unknown" or "-u").
+func (f *FlagSet) UnknownFlags() []string {
+	return f.unknownFlags
 }
 
 // setFieldValue sets a string value to a reflect.Value based on its type
@@ -579,6 +614,15 @@ func (f *FlagSet) FromStruct(v any) error {
 				f.restField = fieldValue.Addr().Interface().(*[]string)
 			}
 			continue // Don't process rest field as a flag
+		}
+
+		// Check for "unknown" tag - special handling for unknown flags
+		if field.Tag.Get("unknown") != "" {
+			if field.Type.Kind() == reflect.Slice && field.Type.Elem().Kind() == reflect.String {
+				f.unknownField = fieldValue.Addr().Interface().(*[]string)
+				f.allowUnknownFlags = true // Automatically enable unknown flag handling
+			}
+			continue // Don't process unknown field as a flag
 		}
 
 		// Parse struct tags
