@@ -12,6 +12,7 @@ mflags works like Go's standard `flag` package but adds significantly more funct
 - **Unknown flag handling** - Optionally accumulate unknown flags instead of erroring
 - **Struct-based parsing** - Define flags using struct tags (similar to JSON marshaling)
 - **Command dispatcher** - Build multi-level command hierarchies (like git, kubectl)
+- **Command inference** - Automatically create commands from function signatures using reflection
 - **Interspersed flags** - Allow flags anywhere in the command sequence
 - **MCP server mode** - Expose commands as Model Context Protocol tools
 - **Shell completion** - Generate bash and zsh completion scripts
@@ -141,10 +142,16 @@ mflags.ParseStruct(config, []string{
 Build sophisticated multi-level command hierarchies like `git`, `docker`, or `kubectl`:
 
 ```go
-type DeployFlags struct {
+type DeployConfig struct {
     Environment string `position:"0" usage:"Environment to deploy to"`
     DryRun      bool   `long:"dry-run" usage:"Perform a dry run"`
     Verbose     bool   `long:"verbose" short:"v" usage:"Verbose output"`
+}
+
+func deploy(config *DeployConfig) error {
+    fmt.Printf("Deploying to %s (dry-run: %v)\n",
+        config.Environment, config.DryRun)
+    return nil
 }
 
 func main() {
@@ -161,18 +168,8 @@ func main() {
         mflags.WithUsage("Show version information"),
     ))
 
-    // Add a command with struct-based flags
-    deployFS := mflags.NewFlagSet("deploy")
-    deployFlags := &DeployFlags{}
-    deployFS.FromStruct(deployFlags)
-
-    dispatcher.Dispatch("deploy", mflags.NewCommand(
-        deployFS,
-        func(fs *mflags.FlagSet, args []string) error {
-            fmt.Printf("Deploying to %s (dry-run: %v)\n",
-                deployFlags.Environment, deployFlags.DryRun)
-            return nil
-        },
+    // Add a command with struct-based flags using Infer
+    dispatcher.Dispatch("deploy", mflags.Infer(deploy,
         mflags.WithUsage("Deploy the application"),
     ))
 
@@ -208,30 +205,68 @@ $ myapp config get database.host
 database.host=localhost
 ```
 
+### Command Inference
+
+The `Infer` helper simplifies command creation by automatically generating flags from a function signature using reflection:
+
+```go
+type DeployConfig struct {
+    Environment string `position:"0" usage:"Target environment"`
+    Version     string `position:"1" usage:"Version to deploy"`
+    DryRun      bool   `long:"dry-run" usage:"Simulate deployment"`
+    Verbose     bool   `long:"verbose" short:"v" usage:"Verbose output"`
+}
+
+func deploy(config *DeployConfig) error {
+    fmt.Printf("Deploying %s to %s (dry-run: %v)\n",
+        config.Version, config.Environment, config.DryRun)
+    return nil
+}
+
+func main() {
+    dispatcher := mflags.NewDispatcher("myapp")
+
+    // Automatically infer command from function signature
+    dispatcher.Dispatch("deploy", mflags.Infer(deploy,
+        mflags.WithUsage("Deploy the application"),
+    ))
+
+    if err := dispatcher.Run(os.Args[1:]); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+The `Infer` function:
+- Validates function signature: `func(*ConfigStruct) error`
+- Creates a FlagSet from struct tags automatically
+- Handles all flag types, positional args, rest args, and unknown flags
+- Passes the populated struct to your function when executed
+
+```bash
+$ myapp deploy production v1.2.3 --dry-run -v
+Deploying v1.2.3 to production (dry-run: true)
+```
+
 ### Interspersed Flags
 
 The dispatcher automatically supports flags at any position in the command sequence:
 
 ```go
-type ServerFlags struct {
+type ServerConfig struct {
     Port    int    `long:"port" short:"p" default:"8080"`
     Host    string `long:"host" default:"localhost"`
     Debug   bool   `long:"debug" short:"d"`
 }
 
+func startServer(config *ServerConfig) error {
+    fmt.Printf("Starting server on %s:%d (debug: %v)\n",
+        config.Host, config.Port, config.Debug)
+    return nil
+}
+
 dispatcher := mflags.NewDispatcher("myapp")
-
-serverFS := mflags.NewFlagSet("server start")
-serverFlags := &ServerFlags{}
-serverFS.FromStruct(serverFlags)
-
-dispatcher.Dispatch("server start", mflags.NewCommand(
-    serverFS,
-    func(fs *mflags.FlagSet, args []string) error {
-        fmt.Printf("Starting server on %s:%d (debug: %v)\n",
-            serverFlags.Host, serverFlags.Port, serverFlags.Debug)
-        return nil
-    },
+dispatcher.Dispatch("server start", mflags.Infer(startServer,
     mflags.WithUsage("Start the server"),
 ))
 ```
@@ -249,28 +284,24 @@ $ myapp server start --port 9000 --debug
 Expose your CLI commands as Model Context Protocol (MCP) tools for AI assistants:
 
 ```go
-type GreetFlags struct {
+type GreetConfig struct {
     Name   string `long:"name" short:"n" default:"World" usage:"Name to greet"`
     Formal bool   `long:"formal" short:"f" usage:"Use formal greeting"`
+}
+
+func greet(config *GreetConfig) error {
+    if config.Formal {
+        fmt.Printf("Good day, %s!\n", config.Name)
+    } else {
+        fmt.Printf("Hello, %s!\n", config.Name)
+    }
+    return nil
 }
 
 func main() {
     dispatcher := mflags.NewDispatcher("myapp")
 
-    greetFS := mflags.NewFlagSet("greet")
-    greetFlags := &GreetFlags{}
-    greetFS.FromStruct(greetFlags)
-
-    dispatcher.Dispatch("greet", mflags.NewCommand(
-        greetFS,
-        func(fs *mflags.FlagSet, args []string) error {
-            if greetFlags.Formal {
-                fmt.Printf("Good day, %s!\n", greetFlags.Name)
-            } else {
-                fmt.Printf("Hello, %s!\n", greetFlags.Name)
-            }
-            return nil
-        },
+    dispatcher.Dispatch("greet", mflags.Infer(greet,
         mflags.WithUsage("Greet someone"),
     ))
 
@@ -434,6 +465,7 @@ var (
 | Short flags | ✗ | ✓ |
 | Combined short flags (`-abc`) | ✗ | ✓ |
 | Struct-based parsing | ✗ | ✓ |
+| Command inference from functions | ✗ | ✓ |
 | Positional arguments | ✗ | ✓ |
 | Rest arguments | ✗ | ✓ |
 | Unknown flag handling | ✗ | ✓ |
@@ -471,41 +503,33 @@ type DeployConfig struct {
     DryRun      bool     `long:"dry-run" usage:"Simulate deployment"`
 }
 
+func startServer(config *ServerConfig) error {
+    fmt.Printf("Starting server on %s:%d (verbose: %v)\n",
+        config.Host, config.Port, config.Verbose)
+    // ... server implementation ...
+    return nil
+}
+
+func deploy(config *DeployConfig) error {
+    fmt.Printf("Deploying %s to %s (dry-run: %v)\n",
+        config.Version, config.Environment, config.DryRun)
+    if len(config.Tags) > 0 {
+        fmt.Printf("Tags: %v\n", config.Tags)
+    }
+    // ... deployment implementation ...
+    return nil
+}
+
 func main() {
     dispatcher := mflags.NewDispatcher("myapp")
 
     // Server start command
-    serverFS := mflags.NewFlagSet("server start")
-    serverConfig := &ServerConfig{}
-    serverFS.FromStruct(serverConfig)
-
-    dispatcher.Dispatch("server start", mflags.NewCommand(
-        serverFS,
-        func(fs *mflags.FlagSet, args []string) error {
-            fmt.Printf("Starting server on %s:%d (verbose: %v)\n",
-                serverConfig.Host, serverConfig.Port, serverConfig.Verbose)
-            // ... server implementation ...
-            return nil
-        },
+    dispatcher.Dispatch("server start", mflags.Infer(startServer,
         mflags.WithUsage("Start the application server"),
     ))
 
     // Deploy command
-    deployFS := mflags.NewFlagSet("deploy")
-    deployConfig := &DeployConfig{}
-    deployFS.FromStruct(deployConfig)
-
-    dispatcher.Dispatch("deploy", mflags.NewCommand(
-        deployFS,
-        func(fs *mflags.FlagSet, args []string) error {
-            fmt.Printf("Deploying %s to %s (dry-run: %v)\n",
-                deployConfig.Version, deployConfig.Environment, deployConfig.DryRun)
-            if len(deployConfig.Tags) > 0 {
-                fmt.Printf("Tags: %v\n", deployConfig.Tags)
-            }
-            // ... deployment implementation ...
-            return nil
-        },
+    dispatcher.Dispatch("deploy", mflags.Infer(deploy,
         mflags.WithUsage("Deploy application to environment"),
     ))
 
