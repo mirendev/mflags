@@ -147,9 +147,13 @@ func (d *Dispatcher) Execute(args []string) error {
 		return d.showHelp()
 	}
 
-	// Check for help flags anywhere in the arguments
+	// Check for help flags anywhere in the arguments, but stop at --
 	hasHelp := false
 	for _, arg := range args {
+		if arg == "--" {
+			// Stop processing flags after --
+			break
+		}
 		if arg == "-h" || arg == "--help" || arg == "help" {
 			hasHelp = true
 			break

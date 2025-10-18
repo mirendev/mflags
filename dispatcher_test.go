@@ -769,3 +769,68 @@ func TestDispatcherFlagsAfterPositionalArgs(t *testing.T) {
 		})
 	}
 }
+
+// TestDispatcherHelpAfterDoubleHyphen tests that help flags after -- are not processed
+func TestDispatcherHelpAfterDoubleHyphen(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	fs := NewFlagSet("process")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	var executed bool
+	var capturedArgs []string
+
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
+		executed = true
+		capturedArgs = args
+		return nil
+	}, WithUsage("Process files"))
+
+	d.Dispatch("process", cmd)
+
+	// Test that -h after -- is treated as an argument, not a help flag
+	executed = false
+	capturedArgs = nil
+	err := d.Execute([]string{"process", "--", "file.txt", "-h"})
+
+	assert.NoError(t, err, "Should not error when -h comes after --")
+	assert.True(t, executed, "Command should execute, not show help")
+	assert.Equal(t, []string{"file.txt", "-h"}, capturedArgs, "-h after -- should be treated as argument")
+
+	// Test that --help after -- is treated as an argument, not a help flag
+	executed = false
+	capturedArgs = nil
+	err = d.Execute([]string{"process", "--", "file.txt", "--help"})
+
+	assert.NoError(t, err, "Should not error when --help comes after --")
+	assert.True(t, executed, "Command should execute, not show help")
+	assert.Equal(t, []string{"file.txt", "--help"}, capturedArgs, "--help after -- should be treated as argument")
+
+	// Test that help after -- is treated as an argument, not a help flag
+	executed = false
+	capturedArgs = nil
+	err = d.Execute([]string{"process", "--", "help"})
+
+	assert.NoError(t, err, "Should not error when help comes after --")
+	assert.True(t, executed, "Command should execute, not show help")
+	assert.Equal(t, []string{"help"}, capturedArgs, "help after -- should be treated as argument")
+
+	// Ensure -h before -- still works as help
+	executed = false
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = d.Execute([]string{"process", "-h"})
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.NoError(t, err, "Should not error on help flag")
+	assert.Contains(t, output, "Usage:", "Should show help")
+	assert.False(t, executed, "Command should not execute when help is requested")
+}
