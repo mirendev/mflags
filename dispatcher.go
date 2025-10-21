@@ -437,7 +437,7 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 
 			// Add value placeholder for non-boolean flags
 			if !flag.Value.IsBool() {
-				flagStr += " <value>"
+				flagStr += fmt.Sprintf(" <%s>", flag.Value.Type())
 			}
 
 			// Print flag with usage

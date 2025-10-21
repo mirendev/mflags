@@ -48,6 +48,7 @@ type Value interface {
 	String() string
 	Set(string) error
 	IsBool() bool
+	Type() string
 }
 
 type boolValue bool
@@ -69,6 +70,10 @@ func (b *boolValue) IsBool() bool {
 	return true
 }
 
+func (b *boolValue) Type() string {
+	return "bool"
+}
+
 type stringValue string
 
 func (s *stringValue) Set(val string) error {
@@ -82,6 +87,10 @@ func (s *stringValue) String() string {
 
 func (s *stringValue) IsBool() bool {
 	return false
+}
+
+func (s *stringValue) Type() string {
+	return "string"
 }
 
 type intValue int
@@ -103,6 +112,10 @@ func (i *intValue) IsBool() bool {
 	return false
 }
 
+func (i *intValue) Type() string {
+	return "int"
+}
+
 type stringArrayValue []string
 
 func (s *stringArrayValue) Set(val string) error {
@@ -116,6 +129,10 @@ func (s *stringArrayValue) String() string {
 
 func (s *stringArrayValue) IsBool() bool {
 	return false
+}
+
+func (s *stringArrayValue) Type() string {
+	return "value,..."
 }
 
 type durationValue time.Duration
@@ -135,6 +152,10 @@ func (d *durationValue) String() string {
 
 func (d *durationValue) IsBool() bool {
 	return false
+}
+
+func (d *durationValue) Type() string {
+	return "duration"
 }
 
 // NewFlagSet returns a new, empty flag set with the specified name.

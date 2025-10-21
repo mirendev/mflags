@@ -830,6 +830,47 @@ func TestDispatcherSubCommandHelp(t *testing.T) {
 	assert.NotContains(t, output, "remote add")
 }
 
+// TestDispatcherHelpShowsTypes tests that help output shows specific types for flags
+func TestDispatcherHelpShowsTypes(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Create a command with flags of different types
+	fs := NewFlagSet("build")
+	fs.String("output", 'o', "a.out", "output file")
+	fs.Int("jobs", 'j', 1, "number of parallel jobs")
+	fs.Duration("timeout", 't', 0, "build timeout")
+	fs.StringArray("tags", 'T', []string{}, "build tags")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	d.Dispatch("build", NewCommand(fs,
+		func(flags *FlagSet, args []string) error { return nil },
+		WithUsage("Build the project")))
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Show command-specific help
+	err := d.Execute([]string{"build", "--help"})
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.NoError(t, err)
+	assert.Contains(t, output, "Usage: myapp build")
+	assert.Contains(t, output, "-o, --output <string>")
+	assert.Contains(t, output, "-j, --jobs <int>")
+	assert.Contains(t, output, "-t, --timeout <duration>")
+	assert.Contains(t, output, "-T, --tags <string-array>")
+	assert.Contains(t, output, "-v, --verbose")
+	assert.NotContains(t, output, "<value>") // Should not have generic <value> anymore
+}
+
 // TestDispatcherHelpAfterDoubleHyphen tests that help flags after -- are not processed
 func TestDispatcherHelpAfterDoubleHyphen(t *testing.T) {
 	d := NewDispatcher("myapp")
