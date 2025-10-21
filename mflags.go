@@ -172,8 +172,8 @@ func NewFlagSet(name string) *FlagSet {
 // BoolVar defines a bool flag with the specified name, short form, default value, and usage string.
 // The argument p points to a bool variable in which to store the value of the flag.
 func (f *FlagSet) BoolVar(p *bool, name string, short rune, value bool, usage string) {
-	f.Var((*boolValue)(p), name, short, usage)
 	*p = value
+	f.Var((*boolValue)(p), name, short, usage)
 }
 
 // Bool defines a bool flag with the specified name, short form, default value, and usage string.
@@ -187,8 +187,8 @@ func (f *FlagSet) Bool(name string, short rune, value bool, usage string) *bool 
 // StringVar defines a string flag with the specified name, short form, default value, and usage string.
 // The argument p points to a string variable in which to store the value of the flag.
 func (f *FlagSet) StringVar(p *string, name string, short rune, value string, usage string) {
-	f.Var((*stringValue)(p), name, short, usage)
 	*p = value
+	f.Var((*stringValue)(p), name, short, usage)
 }
 
 // String defines a string flag with the specified name, short form, default value, and usage string.
@@ -202,8 +202,8 @@ func (f *FlagSet) String(name string, short rune, value string, usage string) *s
 // IntVar defines an int flag with the specified name, short form, default value, and usage string.
 // The argument p points to an int variable in which to store the value of the flag.
 func (f *FlagSet) IntVar(p *int, name string, short rune, value int, usage string) {
-	f.Var((*intValue)(p), name, short, usage)
 	*p = value
+	f.Var((*intValue)(p), name, short, usage)
 }
 
 // Int defines an int flag with the specified name, short form, default value, and usage string.
@@ -218,12 +218,12 @@ func (f *FlagSet) Int(name string, short rune, value int, usage string) *int {
 // The argument p points to a []string variable in which to store the value of the flag.
 // The flag value is expected to be a comma-separated list of strings.
 func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []string, usage string) {
-	f.Var((*stringArrayValue)(p), name, short, usage)
 	if value != nil {
 		*p = value
 	} else {
 		*p = []string{}
 	}
+	f.Var((*stringArrayValue)(p), name, short, usage)
 }
 
 // StringArray defines a string array flag with the specified name, short form, default value, and usage string.
@@ -239,8 +239,8 @@ func (f *FlagSet) StringArray(name string, short rune, value []string, usage str
 // The argument p points to a time.Duration variable in which to store the value of the flag.
 // The flag accepts values parseable by time.ParseDuration.
 func (f *FlagSet) DurationVar(p *time.Duration, name string, short rune, value time.Duration, usage string) {
-	f.Var((*durationValue)(p), name, short, usage)
 	*p = value
+	f.Var((*durationValue)(p), name, short, usage)
 }
 
 // Duration defines a time.Duration flag with the specified name, short form, default value, and usage string.
@@ -428,6 +428,24 @@ func (f *FlagSet) Parse(arguments []string) error {
 	f.parsed = true
 	f.args = nil
 	f.unknownFlags = nil
+
+	// Check for help flags (-h or --help) before parsing, stop at --
+	for _, arg := range arguments {
+		if arg == "--" {
+			break
+		}
+		if arg == "-h" || arg == "--help" {
+			// Check if these flags are already defined
+			_, hDefined := f.shortMap['h']
+			_, helpDefined := f.flags["help"]
+
+			// If help flags are not defined, show help and return ErrHelp
+			if (arg == "-h" && !hDefined) || (arg == "--help" && !helpDefined) {
+				f.ShowHelp()
+				return ErrHelp
+			}
+		}
+	}
 
 	for i := 0; i < len(arguments); i++ {
 		arg := arguments[i]
@@ -778,6 +796,61 @@ func (f *FlagSet) FromStruct(v any) error {
 	}
 
 	return nil
+}
+
+// ShowHelp displays help information for the flag set, including all defined flags
+// and their usage information.
+func (f *FlagSet) ShowHelp() {
+	if f.name != "" {
+		fmt.Printf("Usage: %s [options]", f.name)
+		// Check if there are positional arguments expected
+		hasPositional := false
+		if len(f.posFields) > 0 {
+			hasPositional = true
+		}
+		if f.restField != nil {
+			hasPositional = true
+		}
+		if hasPositional {
+			fmt.Print(" [arguments]")
+		}
+		fmt.Println()
+	}
+
+	// Show flags if any are defined
+	hasFlags := false
+	f.VisitAll(func(flag *Flag) {
+		if !hasFlags {
+			fmt.Println("\nOptions:")
+			hasFlags = true
+		}
+
+		// Format flag display
+		var flagStr string
+		if flag.Short != 0 && flag.Name != "" {
+			flagStr = fmt.Sprintf("  -%c, --%s", flag.Short, flag.Name)
+		} else if flag.Short != 0 {
+			flagStr = fmt.Sprintf("  -%c", flag.Short)
+		} else {
+			flagStr = fmt.Sprintf("      --%s", flag.Name)
+		}
+
+		// Add value placeholder for non-boolean flags
+		if !flag.Value.IsBool() {
+			flagStr += fmt.Sprintf(" <%s>", flag.Value.Type())
+		}
+
+		// Print flag with usage
+		if flag.Usage != "" {
+			fmt.Printf("%-30s %s", flagStr, flag.Usage)
+			if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "0" {
+				fmt.Printf(" (default: %s)", flag.DefValue)
+			}
+			fmt.Println()
+		} else {
+			fmt.Println(flagStr)
+		}
+	})
 }
 
 // ParseStruct parses command line arguments and updates the struct fields.

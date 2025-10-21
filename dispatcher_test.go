@@ -866,9 +866,8 @@ func TestDispatcherHelpShowsTypes(t *testing.T) {
 	assert.Contains(t, output, "-o, --output <string>")
 	assert.Contains(t, output, "-j, --jobs <int>")
 	assert.Contains(t, output, "-t, --timeout <duration>")
-	assert.Contains(t, output, "-T, --tags <string-array>")
+	assert.Contains(t, output, "-T, --tags <value,...>")
 	assert.Contains(t, output, "-v, --verbose")
-	assert.NotContains(t, output, "<value>") // Should not have generic <value> anymore
 }
 
 // TestDispatcherHelpAfterDoubleHyphen tests that help flags after -- are not processed

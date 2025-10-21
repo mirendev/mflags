@@ -1,6 +1,9 @@
 package mflags
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
 	"time"
 
@@ -1458,4 +1461,146 @@ func TestStructUnknownTagBeforeKnownFlags(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", config.Name) // name flag is after unknown, so not processed
 	assert.Equal(t, []string{"--unknown", "value", "--name", "test"}, config.UnknownFlags)
+}
+
+func TestAutomaticHelpFlag(t *testing.T) {
+	// Test -h shows help when not defined
+	t.Run("automatic -h", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.String("output", 'o', "a.out", "output file")
+		fs.Bool("verbose", 'v', false, "verbose output")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Equal(t, ErrHelp, err)
+		assert.Contains(t, output, "Usage: myapp")
+		assert.Contains(t, output, "-o, --output")
+		assert.Contains(t, output, "-v, --verbose")
+	})
+
+	// Test --help shows help when not defined
+	t.Run("automatic --help", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.Int("jobs", 'j', 1, "number of jobs")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Equal(t, ErrHelp, err)
+		assert.Contains(t, output, "Usage: myapp")
+		assert.Contains(t, output, "-j, --jobs")
+	})
+
+	// Test -h is not treated as help when already defined
+	t.Run("-h defined as flag", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		host := fs.String("host", 'h', "localhost", "hostname")
+
+		err := fs.Parse([]string{"-h", "example.com"})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "example.com", *host)
+	})
+
+	// Test --help is not treated as help when already defined
+	t.Run("--help defined as flag", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		helpText := fs.String("help", 0, "", "help text to display")
+
+		err := fs.Parse([]string{"--help", "custom help message"})
+
+		assert.NoError(t, err)
+		assert.Equal(t, "custom help message", *helpText)
+	})
+
+	// Test help flags after -- are not treated as help
+	t.Run("help after --", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.String("output", 'o', "a.out", "output file")
+
+		err := fs.Parse([]string{"--", "-h", "--help"})
+
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"-h", "--help"}, fs.Args())
+	})
+
+	// Test help with mixed flags
+	t.Run("help with other flags", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.Bool("verbose", 'v', false, "verbose output")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"-v", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.Equal(t, ErrHelp, err)
+		assert.Contains(t, buf.String(), "Usage:")
+	})
+}
+
+func TestShowHelp(t *testing.T) {
+	fs := NewFlagSet("testapp")
+	fs.String("output", 'o', "a.out", "output file")
+	fs.Int("jobs", 'j', 4, "number of parallel jobs")
+	fs.Bool("verbose", 'v', false, "verbose output")
+	fs.Duration("timeout", 't', 30*time.Second, "operation timeout")
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	fs.ShowHelp()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.Contains(t, output, "Usage: testapp [options]")
+	assert.Contains(t, output, "Options:")
+	assert.Contains(t, output, "-o, --output <string>")
+	assert.Contains(t, output, "output file")
+	assert.Contains(t, output, "(default: a.out)")
+	assert.Contains(t, output, "-j, --jobs <int>")
+	assert.Contains(t, output, "number of parallel jobs")
+	assert.Contains(t, output, "(default: 4)")
+	assert.Contains(t, output, "-v, --verbose")
+	assert.Contains(t, output, "verbose output")
+	assert.Contains(t, output, "-t, --timeout <duration>")
+	assert.Contains(t, output, "operation timeout")
 }
