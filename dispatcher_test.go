@@ -770,6 +770,66 @@ func TestDispatcherFlagsAfterPositionalArgs(t *testing.T) {
 	}
 }
 
+// TestDispatcherSubCommandHelp tests that sub-commands are displayed in help output
+func TestDispatcherSubCommandHelp(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Register parent command
+	parentFs := NewFlagSet("git")
+	parentFs.Bool("verbose", 'v', false, "verbose output")
+	d.Dispatch("git", NewCommand(parentFs,
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Git version control system")))
+
+	// Register direct sub-commands
+	d.Dispatch("git clone", NewCommand(NewFlagSet("git clone"),
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Clone a repository")))
+
+	d.Dispatch("git commit", NewCommand(NewFlagSet("git commit"),
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Record changes to the repository")))
+
+	d.Dispatch("git push", NewCommand(NewFlagSet("git push"),
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Update remote refs")))
+
+	// Register nested sub-command (should not show in git's help)
+	d.Dispatch("git remote add", NewCommand(NewFlagSet("git remote add"),
+		func(fs *FlagSet, args []string) error { return nil },
+		WithUsage("Add a new remote")))
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Show help for the git command
+	err := d.Execute([]string{"git", "--help"})
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.NoError(t, err)
+	assert.Contains(t, output, "Usage: myapp git")
+	assert.Contains(t, output, "Git version control system")
+	assert.Contains(t, output, "Options:")
+	assert.Contains(t, output, "-v, --verbose")
+	assert.Contains(t, output, "Sub-commands:")
+	assert.Contains(t, output, "clone")
+	assert.Contains(t, output, "Clone a repository")
+	assert.Contains(t, output, "commit")
+	assert.Contains(t, output, "Record changes to the repository")
+	assert.Contains(t, output, "push")
+	assert.Contains(t, output, "Update remote refs")
+	// Should not show nested sub-command "remote add", only direct children
+	assert.NotContains(t, output, "remote add")
+}
+
 // TestDispatcherHelpAfterDoubleHyphen tests that help flags after -- are not processed
 func TestDispatcherHelpAfterDoubleHyphen(t *testing.T) {
 	d := NewDispatcher("myapp")

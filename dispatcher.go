@@ -453,7 +453,58 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 		})
 	}
 
+	// Show sub-commands if any exist
+	subCommands := d.getSubCommands(entry.Path)
+	if len(subCommands) > 0 {
+		fmt.Println("\nSub-commands:")
+
+		// Find the maximum length for alignment
+		maxLen := 0
+		for _, subCmd := range subCommands {
+			// Display the sub-command name without the parent prefix
+			subCmdName := strings.TrimPrefix(subCmd.Path, entry.Path+" ")
+			if len(subCmdName) > maxLen {
+				maxLen = len(subCmdName)
+			}
+		}
+
+		// Print sub-commands with usage
+		for _, subCmd := range subCommands {
+			// Display the sub-command name without the parent prefix
+			subCmdName := strings.TrimPrefix(subCmd.Path, entry.Path+" ")
+			if subCmd.Usage != "" {
+				fmt.Printf("  %-*s  %s\n", maxLen+2, subCmdName, subCmd.Usage)
+			} else {
+				fmt.Printf("  %s\n", subCmdName)
+			}
+		}
+	}
+
 	return nil
+}
+
+// getSubCommands returns all direct sub-commands of a command
+func (d *Dispatcher) getSubCommands(parentPath string) []*CommandEntry {
+	var subCommands []*CommandEntry
+	prefix := parentPath + " "
+
+	// Find all commands that start with the parent path + space
+	for path, entry := range d.commands {
+		if strings.HasPrefix(path, prefix) {
+			// Only include direct sub-commands (no further nesting)
+			remainder := strings.TrimPrefix(path, prefix)
+			if !strings.Contains(remainder, " ") {
+				subCommands = append(subCommands, entry)
+			}
+		}
+	}
+
+	// Sort sub-commands by path
+	sort.Slice(subCommands, func(i, j int) bool {
+		return subCommands[i].Path < subCommands[j].Path
+	})
+
+	return subCommands
 }
 
 // GetCommand returns the command for a given path, or nil if not found
