@@ -1604,3 +1604,89 @@ func TestShowHelp(t *testing.T) {
 	assert.Contains(t, output, "-t, --timeout <duration>")
 	assert.Contains(t, output, "operation timeout")
 }
+
+func TestShortOnlyFlags(t *testing.T) {
+	// Test that short-only flags work in parsing
+	t.Run("parse short-only flag", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		verbose := fs.Bool("", 'v', false, "verbose output")
+		debug := fs.Bool("", 'd', false, "debug mode")
+
+		err := fs.Parse([]string{"-v", "-d"})
+
+		assert.NoError(t, err)
+		assert.True(t, *verbose)
+		assert.True(t, *debug)
+	})
+
+	// Test that short-only flags appear in help
+	t.Run("short-only flags in help", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.Bool("", 'v', false, "verbose output")
+		fs.String("", 's', "default", "short string flag")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "-v")
+		assert.Contains(t, output, "verbose output")
+		assert.Contains(t, output, "-s <string>")
+		assert.Contains(t, output, "short string flag")
+	})
+
+	// Test mixed long-only, short-only, and both
+	t.Run("mixed flag types in help", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.Bool("verbose", 'v', false, "verbose (both)")
+		fs.Bool("quiet", 0, false, "quiet (long-only)")
+		fs.Bool("", 'd', false, "debug (short-only)")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		// Check all three types appear
+		assert.Contains(t, output, "-v, --verbose")
+		assert.Contains(t, output, "verbose (both)")
+		assert.Contains(t, output, "--quiet")
+		assert.Contains(t, output, "quiet (long-only)")
+		assert.Contains(t, output, "-d")
+		assert.Contains(t, output, "debug (short-only)")
+	})
+
+	// Test parsing mixed flag types
+	t.Run("parse mixed flag types", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		verbose := fs.Bool("verbose", 'v', false, "verbose (both)")
+		quiet := fs.Bool("quiet", 0, false, "quiet (long-only)")
+		debug := fs.Bool("", 'd', false, "debug (short-only)")
+
+		err := fs.Parse([]string{"-v", "--quiet", "-d"})
+
+		assert.NoError(t, err)
+		assert.True(t, *verbose)
+		assert.True(t, *quiet)
+		assert.True(t, *debug)
+	})
+}

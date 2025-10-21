@@ -27,6 +27,7 @@ type FlagSet struct {
 	name              string
 	flags             map[string]*Flag
 	shortMap          map[rune]*Flag
+	allFlags          []*Flag                  // All registered flags (for iteration)
 	args              []string
 	parsed            bool
 	restField         *[]string                // Pointer to field marked with "rest" tag
@@ -365,6 +366,9 @@ func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 	if short != 0 {
 		f.shortMap[short] = flag
 	}
+
+	// Add to the list of all flags for iteration
+	f.allFlags = append(f.allFlags, flag)
 }
 
 // Lookup returns the Flag with the given name, or nil if not found

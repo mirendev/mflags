@@ -16,20 +16,26 @@ type Completion struct {
 
 // VisitAll calls fn for each flag in lexicographical order
 func (f *FlagSet) VisitAll(fn func(*Flag)) {
-	// Collect all flags
-	var flags []*Flag
-	seen := make(map[*Flag]bool)
+	// Make a copy of allFlags for sorting
+	flags := make([]*Flag, len(f.allFlags))
+	copy(flags, f.allFlags)
 
-	for _, flag := range f.flags {
-		if !seen[flag] {
-			flags = append(flags, flag)
-			seen[flag] = true
-		}
-	}
-
-	// Sort by name
+	// Sort by name, or by short rune if name is empty
 	sort.Slice(flags, func(i, j int) bool {
-		return flags[i].Name < flags[j].Name
+		// If both have names, sort by name
+		if flags[i].Name != "" && flags[j].Name != "" {
+			return flags[i].Name < flags[j].Name
+		}
+		// If i has no name but j does, i comes after j
+		if flags[i].Name == "" && flags[j].Name != "" {
+			return false
+		}
+		// If j has no name but i does, i comes before j
+		if flags[i].Name != "" && flags[j].Name == "" {
+			return true
+		}
+		// Both have no name, sort by short rune
+		return flags[i].Short < flags[j].Short
 	})
 
 	// Call function for each flag
