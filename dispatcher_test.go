@@ -934,3 +934,101 @@ func TestDispatcherHelpAfterDoubleHyphen(t *testing.T) {
 	assert.Contains(t, output, "Usage:", "Should show help")
 	assert.False(t, executed, "Command should not execute when help is requested")
 }
+
+func TestDispatcherHelpWithAllowUnknownFlags(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Create a command that allows unknown flags
+	fs := NewFlagSet("run")
+	fs.AllowUnknownFlags(true)
+	fs.String("config", 'c', "", "config file")
+
+	var executed bool
+	var capturedArgs []string
+	var capturedUnknown []string
+
+	cmd := NewCommand(fs, func(flags *FlagSet, args []string) error {
+		executed = true
+		capturedArgs = args
+		capturedUnknown = flags.UnknownFlags()
+		return nil
+	}, WithUsage("Run a command"))
+
+	d.Dispatch("run", cmd)
+
+	// Test: -h alone should show help even with allowUnknownFlags
+	t.Run("-h alone shows help", func(t *testing.T) {
+		executed = false
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"run", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.NoError(t, err)
+		assert.Contains(t, buf.String(), "Usage:")
+		assert.False(t, executed, "Should show help, not execute")
+	})
+
+	// Test: run blah -h should NOT show help (user's case)
+	t.Run("run blah -h does not show help", func(t *testing.T) {
+		executed = false
+		capturedArgs = nil
+		capturedUnknown = nil
+
+		err := d.Execute([]string{"run", "blah", "-h"})
+
+		assert.NoError(t, err)
+		assert.True(t, executed, "Should execute command")
+		assert.Equal(t, []string{"blah"}, capturedArgs)
+		assert.Equal(t, []string{"-h"}, capturedUnknown)
+	})
+
+	// Test: run --help with other args
+	t.Run("run command --help does not show help", func(t *testing.T) {
+		executed = false
+		capturedArgs = nil
+		capturedUnknown = nil
+
+		err := d.Execute([]string{"run", "command", "--help"})
+
+		assert.NoError(t, err)
+		assert.True(t, executed, "Should execute command")
+		assert.Equal(t, []string{"command"}, capturedArgs)
+		assert.Equal(t, []string{"--help"}, capturedUnknown)
+	})
+
+	// Test: without allowUnknownFlags, -h with args still shows help
+	t.Run("without allowUnknownFlags, -h shows help", func(t *testing.T) {
+		d2 := NewDispatcher("myapp")
+		fs2 := NewFlagSet("test")
+		fs2.String("output", 'o', "", "output")
+
+		cmd2 := NewCommand(fs2, func(flags *FlagSet, args []string) error {
+			return nil
+		}, WithUsage("Test command"))
+
+		d2.Dispatch("test", cmd2)
+
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d2.Execute([]string{"test", "blah", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.NoError(t, err)
+		assert.Contains(t, buf.String(), "Usage:")
+	})
+}

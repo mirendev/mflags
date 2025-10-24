@@ -35,6 +35,7 @@ type FlagSet struct {
 	allowUnknownFlags bool                     // If true, accumulate unknown flags instead of erroring
 	unknownFlags      []string                 // Accumulated unknown flags when allowUnknownFlags is true
 	unknownField      *[]string                // Pointer to field marked with "unknown" tag
+	disableAutoHelp   bool                     // If true, don't automatically handle -h/--help in Parse
 }
 
 type Flag struct {
@@ -435,34 +436,37 @@ func (f *FlagSet) Parse(arguments []string) error {
 
 	// Check for help flags (-h or --help) before parsing, stop at --
 	// If allowUnknownFlags is true, only show help if there are no other arguments
-	hasHelpFlag := false
-	hasOtherArgs := false
+	// Skip automatic help if disableAutoHelp is set (e.g., when used through Dispatcher)
+	if !f.disableAutoHelp {
+		hasHelpFlag := false
+		hasOtherArgs := false
 
-	for _, arg := range arguments {
-		if arg == "--" {
-			break
-		}
-		if arg == "-h" || arg == "--help" {
-			// Check if these flags are already defined
-			_, hDefined := f.shortMap['h']
-			_, helpDefined := f.flags["help"]
-
-			// If help flags are not defined, mark that we found a help flag
-			if (arg == "-h" && !hDefined) || (arg == "--help" && !helpDefined) {
-				hasHelpFlag = true
+		for _, arg := range arguments {
+			if arg == "--" {
+				break
 			}
-		} else if !strings.HasPrefix(arg, "-") {
-			// Found a non-flag argument
-			hasOtherArgs = true
-		}
-	}
+			if arg == "-h" || arg == "--help" {
+				// Check if these flags are already defined
+				_, hDefined := f.shortMap['h']
+				_, helpDefined := f.flags["help"]
 
-	// Show help if we found a help flag and either:
-	// 1. allowUnknownFlags is false (always show help), OR
-	// 2. allowUnknownFlags is true but there are no other arguments
-	if hasHelpFlag && (!f.allowUnknownFlags || !hasOtherArgs) {
-		f.ShowHelp()
-		return ErrHelp
+				// If help flags are not defined, mark that we found a help flag
+				if (arg == "-h" && !hDefined) || (arg == "--help" && !helpDefined) {
+					hasHelpFlag = true
+				}
+			} else if !strings.HasPrefix(arg, "-") {
+				// Found a non-flag argument
+				hasOtherArgs = true
+			}
+		}
+
+		// Show help if we found a help flag and either:
+		// 1. allowUnknownFlags is false (always show help), OR
+		// 2. allowUnknownFlags is true but there are no other arguments
+		if hasHelpFlag && (!f.allowUnknownFlags || !hasOtherArgs) {
+			f.ShowHelp()
+			return ErrHelp
+		}
 	}
 
 	for i := 0; i < len(arguments); i++ {

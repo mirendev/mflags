@@ -163,6 +163,19 @@ func (d *Dispatcher) Execute(args []string) error {
 	// Try to find the longest matching command, handling interspersed flags
 	entry, allArgs := d.findCommandWithInterspersedFlags(args)
 
+	// Check for non-flag arguments in the args AFTER the command
+	// (to determine if help should be shown when allowUnknownFlags is true)
+	hasOtherArgs := false
+	for _, arg := range allArgs {
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") {
+			hasOtherArgs = true
+			break
+		}
+	}
+
 	if entry == nil {
 		// No command found, check for help flags
 		if hasHelp {
@@ -172,12 +185,22 @@ func (d *Dispatcher) Execute(args []string) error {
 	}
 
 	// If help is requested, show command-specific help
-	if hasHelp {
+	// BUT if the command allows unknown flags and there are other args, don't show help
+	fs := entry.Command.FlagSet()
+	shouldShowHelp := hasHelp
+	if fs != nil && fs.allowUnknownFlags && hasOtherArgs {
+		shouldShowHelp = false
+	}
+
+	if shouldShowHelp {
 		return d.showCommandHelp(entry)
 	}
 
 	// Parse flags for this command
-	fs := entry.Command.FlagSet()
+	// Disable automatic help in the FlagSet since the Dispatcher already handled it
+	if fs != nil {
+		fs.disableAutoHelp = true
+	}
 	if err := fs.Parse(allArgs); err != nil {
 		return fmt.Errorf("error parsing flags: %w", err)
 	}
