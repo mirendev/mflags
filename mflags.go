@@ -434,6 +434,10 @@ func (f *FlagSet) Parse(arguments []string) error {
 	f.unknownFlags = nil
 
 	// Check for help flags (-h or --help) before parsing, stop at --
+	// If allowUnknownFlags is true, only show help if there are no other arguments
+	hasHelpFlag := false
+	hasOtherArgs := false
+
 	for _, arg := range arguments {
 		if arg == "--" {
 			break
@@ -443,12 +447,22 @@ func (f *FlagSet) Parse(arguments []string) error {
 			_, hDefined := f.shortMap['h']
 			_, helpDefined := f.flags["help"]
 
-			// If help flags are not defined, show help and return ErrHelp
+			// If help flags are not defined, mark that we found a help flag
 			if (arg == "-h" && !hDefined) || (arg == "--help" && !helpDefined) {
-				f.ShowHelp()
-				return ErrHelp
+				hasHelpFlag = true
 			}
+		} else if !strings.HasPrefix(arg, "-") {
+			// Found a non-flag argument
+			hasOtherArgs = true
 		}
+	}
+
+	// Show help if we found a help flag and either:
+	// 1. allowUnknownFlags is false (always show help), OR
+	// 2. allowUnknownFlags is true but there are no other arguments
+	if hasHelpFlag && (!f.allowUnknownFlags || !hasOtherArgs) {
+		f.ShowHelp()
+		return ErrHelp
 	}
 
 	for i := 0; i < len(arguments); i++ {

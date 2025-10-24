@@ -1543,8 +1543,31 @@ func TestAutomaticHelpFlag(t *testing.T) {
 
 		err := fs.Parse([]string{"--", "-h", "--help"})
 
-		assert.NoError(t, err)
+		assert.NoError(t, err, "Should not show help when -h/--help appear after --")
 		assert.Equal(t, []string{"-h", "--help"}, fs.Args())
+	})
+
+	// Test specifically that -- stops help detection
+	t.Run("-- stops help detection", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+
+		// Capture stdout to ensure help is NOT shown
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"--", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err, "Should not return ErrHelp when -h appears after --")
+		assert.Equal(t, []string{"-h"}, fs.Args())
+		assert.NotContains(t, output, "Usage:", "Should not print help text")
 	})
 
 	// Test help with mixed flags
@@ -1566,6 +1589,90 @@ func TestAutomaticHelpFlag(t *testing.T) {
 		io.Copy(&buf, r)
 
 		assert.Equal(t, ErrHelp, err)
+		assert.Contains(t, buf.String(), "Usage:")
+	})
+}
+
+func TestAutomaticHelpWithUnknownFlags(t *testing.T) {
+	// Test that -h alone shows help even with allowUnknownFlags
+	t.Run("-h alone with allowUnknownFlags", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.AllowUnknownFlags(true)
+		fs.String("output", 'o', "a.out", "output file")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.Equal(t, ErrHelp, err)
+		assert.Contains(t, buf.String(), "Usage:")
+	})
+
+	// Test that -h with other args does NOT show help with allowUnknownFlags
+	t.Run("-h with args and allowUnknownFlags", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.AllowUnknownFlags(true)
+		fs.String("output", 'o', "a.out", "output file")
+
+		err := fs.Parse([]string{"blah", "-h"})
+
+		assert.NoError(t, err, "Should not show help when other args are present")
+		assert.Equal(t, []string{"blah"}, fs.Args())
+		assert.Equal(t, []string{"-h"}, fs.UnknownFlags())
+	})
+
+	// Test that --help with other args does NOT show help with allowUnknownFlags
+	t.Run("--help with args and allowUnknownFlags", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.AllowUnknownFlags(true)
+
+		err := fs.Parse([]string{"command", "--help"})
+
+		assert.NoError(t, err, "Should not show help when other args are present")
+		assert.Equal(t, []string{"command"}, fs.Args())
+		assert.Equal(t, []string{"--help"}, fs.UnknownFlags())
+	})
+
+	// Test the user's specific case: myapp run blah -h
+	t.Run("myapp run blah -h", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.AllowUnknownFlags(true)
+
+		err := fs.Parse([]string{"run", "blah", "-h"})
+
+		assert.NoError(t, err, "Should not show help when other args are present")
+		assert.Equal(t, []string{"run", "blah"}, fs.Args())
+		assert.Equal(t, []string{"-h"}, fs.UnknownFlags())
+	})
+
+	// Test that without allowUnknownFlags, -h still shows help
+	t.Run("-h with args but no allowUnknownFlags", func(t *testing.T) {
+		fs := NewFlagSet("myapp")
+		fs.String("output", 'o', "a.out", "output file")
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := fs.Parse([]string{"blah", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.Equal(t, ErrHelp, err, "Should show help even with other args when allowUnknownFlags is false")
 		assert.Contains(t, buf.String(), "Usage:")
 	})
 }
