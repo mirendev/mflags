@@ -1,6 +1,7 @@
 package mflags
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -206,7 +207,14 @@ func (d *Dispatcher) Execute(args []string) error {
 	}
 
 	// Execute the command with the parsed flagset and remaining args
-	return entry.Command.Run(fs, fs.Args())
+	err := entry.Command.Run(fs, fs.Args())
+
+	// Check if command requested help to be shown
+	if errors.Is(err, ErrShowHelp) {
+		return d.showCommandHelp(entry)
+	}
+
+	return err
 }
 
 // Run is an alias for Execute

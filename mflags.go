@@ -14,6 +14,7 @@ var (
 	ErrMissingValue = errors.New("flag needs an argument")
 	ErrInvalidValue = errors.New("invalid flag value")
 	ErrHelp         = errors.New("help requested")
+	ErrShowHelp     = errors.New("show help") // Return from Command.Run to trigger help display
 )
 
 // PositionalField represents a positional argument field

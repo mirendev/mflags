@@ -1032,3 +1032,170 @@ func TestDispatcherHelpWithAllowUnknownFlags(t *testing.T) {
 		assert.Contains(t, buf.String(), "Usage:")
 	})
 }
+
+func TestDispatcherErrShowHelp(t *testing.T) {
+	// Test that returning ErrShowHelp from a command triggers help display
+	t.Run("ErrShowHelp triggers help", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("test")
+		fs.String("output", 'o', "default", "output file")
+		fs.Bool("verbose", 'v', false, "verbose mode")
+
+		d.Dispatch("test", NewCommand(fs, func(flags *FlagSet, args []string) error {
+			return ErrShowHelp
+		}, WithUsage("Test command")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"test"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp test")
+		assert.Contains(t, output, "-o, --output")
+		assert.Contains(t, output, "-v, --verbose")
+		assert.Contains(t, output, "Test command")
+	})
+
+	// Test that ErrShowHelp works with arguments
+	t.Run("ErrShowHelp with args", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("greet")
+		name := fs.String("name", 'n', "", "name to greet")
+
+		d.Dispatch("greet", NewCommand(fs, func(flags *FlagSet, args []string) error {
+			// Show help if name is empty
+			if *name == "" {
+				return ErrShowHelp
+			}
+			return nil
+		}, WithUsage("Greet someone")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"greet"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp greet")
+		assert.Contains(t, output, "-n, --name")
+	})
+
+	// Test that normal execution still works
+	t.Run("normal execution without ErrShowHelp", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("greet")
+		name := fs.String("name", 'n', "", "name to greet")
+
+		var executed bool
+		d.Dispatch("greet", NewCommand(fs, func(flags *FlagSet, args []string) error {
+			if *name == "" {
+				return ErrShowHelp
+			}
+			executed = true
+			return nil
+		}, WithUsage("Greet someone")))
+
+		err := d.Execute([]string{"greet", "--name", "World"})
+
+		assert.NoError(t, err)
+		assert.True(t, executed)
+	})
+
+	// Test that other errors are still propagated
+	t.Run("other errors still propagate", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		d.Dispatch("fail", NewCommand(NewFlagSet("fail"), func(flags *FlagSet, args []string) error {
+			return fmt.Errorf("something went wrong")
+		}))
+
+		err := d.Execute([]string{"fail"})
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "something went wrong")
+	})
+
+	// Test ErrShowHelp with nested commands
+	t.Run("ErrShowHelp with nested command", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("config get")
+		key := fs.String("key", 'k', "", "config key")
+
+		d.Dispatch("config get", NewCommand(fs, func(flags *FlagSet, args []string) error {
+			if *key == "" {
+				return ErrShowHelp
+			}
+			return nil
+		}, WithUsage("Get a config value")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"config", "get"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp config get")
+		assert.Contains(t, output, "-k, --key")
+	})
+
+	// Test wrapped ErrShowHelp is detected
+	t.Run("wrapped ErrShowHelp", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("test")
+		fs.String("required", 'r', "", "required field")
+
+		d.Dispatch("test", NewCommand(fs, func(flags *FlagSet, args []string) error {
+			return fmt.Errorf("missing required field: %w", ErrShowHelp)
+		}, WithUsage("Test command")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"test"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp test")
+	})
+}
