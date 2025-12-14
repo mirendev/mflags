@@ -221,6 +221,121 @@ func (d *durationValue) Type() string {
 	return "duration"
 }
 
+// Pointer value types - these allocate the pointed-to value on first Set,
+// allowing code to distinguish between "not set" (nil) and "set to zero value"
+
+type boolPtrValue struct {
+	p **bool
+}
+
+func (b *boolPtrValue) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*b.p = new(bool)
+	**b.p = v
+	return nil
+}
+
+func (b *boolPtrValue) String() string {
+	if *b.p == nil {
+		return ""
+	}
+	return strconv.FormatBool(**b.p)
+}
+
+func (b *boolPtrValue) IsBool() bool {
+	return true
+}
+
+func (b *boolPtrValue) Type() string {
+	return "bool"
+}
+
+type stringPtrValue struct {
+	p **string
+}
+
+func (s *stringPtrValue) Set(val string) error {
+	*s.p = new(string)
+	**s.p = val
+	return nil
+}
+
+func (s *stringPtrValue) String() string {
+	if *s.p == nil {
+		return ""
+	}
+	return **s.p
+}
+
+func (s *stringPtrValue) IsBool() bool {
+	return false
+}
+
+func (s *stringPtrValue) Type() string {
+	return "string"
+}
+
+type intPtrValue struct {
+	p **int
+}
+
+func (i *intPtrValue) Set(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*i.p = new(int)
+	**i.p = v
+	return nil
+}
+
+func (i *intPtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.Itoa(**i.p)
+}
+
+func (i *intPtrValue) IsBool() bool {
+	return false
+}
+
+func (i *intPtrValue) Type() string {
+	return "int"
+}
+
+type durationPtrValue struct {
+	p **time.Duration
+}
+
+func (d *durationPtrValue) Set(s string) error {
+	v, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*d.p = new(time.Duration)
+	**d.p = v
+	return nil
+}
+
+func (d *durationPtrValue) String() string {
+	if *d.p == nil {
+		return ""
+	}
+	return (**d.p).String()
+}
+
+func (d *durationPtrValue) IsBool() bool {
+	return false
+}
+
+func (d *durationPtrValue) Type() string {
+	return "duration"
+}
+
 // NewFlagSet returns a new, empty flag set with the specified name.
 // The name is used for error messages and help output.
 func NewFlagSet(name string) *FlagSet {
@@ -923,6 +1038,27 @@ func (f *FlagSet) FromStruct(v any) error {
 					defVal, _ = time.ParseDuration(defaultValue)
 				}
 				f.DurationVar(fieldValue.Addr().Interface().(*time.Duration), longName, short, defVal, usage)
+			}
+
+		case reflect.Ptr:
+			// Handle pointer types - allows distinguishing "not set" from "zero value"
+			elemKind := field.Type.Elem().Kind()
+			switch elemKind {
+			case reflect.Bool:
+				p := fieldValue.Addr().Interface().(**bool)
+				f.Var(&boolPtrValue{p: p}, longName, short, usage)
+			case reflect.String:
+				p := fieldValue.Addr().Interface().(**string)
+				f.Var(&stringPtrValue{p: p}, longName, short, usage)
+			case reflect.Int:
+				p := fieldValue.Addr().Interface().(**int)
+				f.Var(&intPtrValue{p: p}, longName, short, usage)
+			case reflect.Int64:
+				// Check if it's a *time.Duration
+				if field.Type.Elem() == reflect.TypeOf(time.Duration(0)) {
+					p := fieldValue.Addr().Interface().(**time.Duration)
+					f.Var(&durationPtrValue{p: p}, longName, short, usage)
+				}
 			}
 		}
 	}

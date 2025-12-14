@@ -2295,6 +2295,302 @@ func TestIntArrayFromStruct(t *testing.T) {
 	})
 }
 
+// Tests for pointer types in FromStruct
+
+func TestPointerTypesFromStruct(t *testing.T) {
+	// Test *bool pointer - nil when not set
+	t.Run("*bool nil when not set", func(t *testing.T) {
+		type Config struct {
+			Verbose *bool `long:"verbose" short:"v" description:"verbose mode"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{})
+		assert.NoError(t, err)
+		assert.Nil(t, config.Verbose)
+	})
+
+	// Test *bool pointer - set to true
+	t.Run("*bool set to true", func(t *testing.T) {
+		type Config struct {
+			Verbose *bool `long:"verbose" short:"v" description:"verbose mode"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-v"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Verbose)
+		assert.True(t, *config.Verbose)
+	})
+
+	// Test *bool pointer - set to false explicitly
+	t.Run("*bool set to false explicitly", func(t *testing.T) {
+		type Config struct {
+			Verbose *bool `long:"verbose" short:"v" description:"verbose mode"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--verbose=false"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Verbose)
+		assert.False(t, *config.Verbose)
+	})
+
+	// Test *string pointer - nil when not set
+	t.Run("*string nil when not set", func(t *testing.T) {
+		type Config struct {
+			Name *string `long:"name" short:"n" description:"name to use"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{})
+		assert.NoError(t, err)
+		assert.Nil(t, config.Name)
+	})
+
+	// Test *string pointer - set to value
+	t.Run("*string set to value", func(t *testing.T) {
+		type Config struct {
+			Name *string `long:"name" short:"n" description:"name to use"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--name", "Alice"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Name)
+		assert.Equal(t, "Alice", *config.Name)
+	})
+
+	// Test *string pointer - set to empty string (distinguishable from nil)
+	t.Run("*string set to empty string", func(t *testing.T) {
+		type Config struct {
+			Name *string `long:"name" short:"n" description:"name to use"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--name", ""})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Name)
+		assert.Equal(t, "", *config.Name)
+	})
+
+	// Test *int pointer - nil when not set
+	t.Run("*int nil when not set", func(t *testing.T) {
+		type Config struct {
+			Count *int `long:"count" short:"c" description:"count value"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{})
+		assert.NoError(t, err)
+		assert.Nil(t, config.Count)
+	})
+
+	// Test *int pointer - set to value
+	t.Run("*int set to value", func(t *testing.T) {
+		type Config struct {
+			Count *int `long:"count" short:"c" description:"count value"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--count", "42"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Count)
+		assert.Equal(t, 42, *config.Count)
+	})
+
+	// Test *int pointer - set to zero (distinguishable from nil)
+	t.Run("*int set to zero", func(t *testing.T) {
+		type Config struct {
+			Count *int `long:"count" short:"c" description:"count value"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--count", "0"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Count)
+		assert.Equal(t, 0, *config.Count)
+	})
+
+	// Test *time.Duration pointer - nil when not set
+	t.Run("*time.Duration nil when not set", func(t *testing.T) {
+		type Config struct {
+			Timeout *time.Duration `long:"timeout" short:"t" description:"timeout duration"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{})
+		assert.NoError(t, err)
+		assert.Nil(t, config.Timeout)
+	})
+
+	// Test *time.Duration pointer - set to value
+	t.Run("*time.Duration set to value", func(t *testing.T) {
+		type Config struct {
+			Timeout *time.Duration `long:"timeout" short:"t" description:"timeout duration"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--timeout", "5s"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Timeout)
+		assert.Equal(t, 5*time.Second, *config.Timeout)
+	})
+
+	// Test *time.Duration pointer - set to zero (distinguishable from nil)
+	t.Run("*time.Duration set to zero", func(t *testing.T) {
+		type Config struct {
+			Timeout *time.Duration `long:"timeout" short:"t" description:"timeout duration"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--timeout", "0s"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Timeout)
+		assert.Equal(t, time.Duration(0), *config.Timeout)
+	})
+
+	// Test mixed pointer and non-pointer types
+	t.Run("mixed pointer and non-pointer types", func(t *testing.T) {
+		type Config struct {
+			Name     string  `long:"name" description:"required name"`
+			Verbose  bool    `long:"verbose" short:"v" description:"verbose mode"`
+			OptCount *int    `long:"count" short:"c" description:"optional count"`
+			OptName  *string `long:"opt-name" description:"optional name"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--name", "test", "-v", "--count", "10"})
+		assert.NoError(t, err)
+		assert.Equal(t, "test", config.Name)
+		assert.True(t, config.Verbose)
+		assert.NotNil(t, config.OptCount)
+		assert.Equal(t, 10, *config.OptCount)
+		assert.Nil(t, config.OptName) // Not set
+	})
+
+	// Test practical use case - conditional logic based on nil
+	t.Run("practical use case - conditional logic", func(t *testing.T) {
+		type Config struct {
+			Port    *int    `long:"port" short:"p" description:"port number"`
+			Host    *string `long:"host" short:"h" description:"hostname"`
+			Timeout *time.Duration `long:"timeout" description:"connection timeout"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--port", "8080"})
+		assert.NoError(t, err)
+
+		// Simulate real-world usage
+		actualPort := 3000 // default
+		if config.Port != nil {
+			actualPort = *config.Port
+		}
+		assert.Equal(t, 8080, actualPort)
+
+		actualHost := "localhost" // default
+		if config.Host != nil {
+			actualHost = *config.Host
+		}
+		assert.Equal(t, "localhost", actualHost) // Host was nil, use default
+
+		actualTimeout := 30 * time.Second // default
+		if config.Timeout != nil {
+			actualTimeout = *config.Timeout
+		}
+		assert.Equal(t, 30*time.Second, actualTimeout) // Timeout was nil, use default
+	})
+
+	// Test all pointer types with short flags
+	t.Run("all pointer types with short flags", func(t *testing.T) {
+		type Config struct {
+			BoolPtr     *bool          `short:"b" description:"bool pointer"`
+			StringPtr   *string        `short:"s" description:"string pointer"`
+			IntPtr      *int           `short:"i" description:"int pointer"`
+			DurationPtr *time.Duration `short:"d" description:"duration pointer"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-b", "-s", "hello", "-i", "99", "-d", "1h"})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.BoolPtr)
+		assert.True(t, *config.BoolPtr)
+		assert.NotNil(t, config.StringPtr)
+		assert.Equal(t, "hello", *config.StringPtr)
+		assert.NotNil(t, config.IntPtr)
+		assert.Equal(t, 99, *config.IntPtr)
+		assert.NotNil(t, config.DurationPtr)
+		assert.Equal(t, time.Hour, *config.DurationPtr)
+	})
+
+	// Test pointer types appear in help output
+	t.Run("pointer types appear in help output", func(t *testing.T) {
+		type Config struct {
+			Name    *string        `long:"name" short:"n" description:"optional name"`
+			Count   *int           `long:"count" short:"c" description:"optional count"`
+			Verbose *bool          `long:"verbose" short:"v" description:"verbose mode"`
+			Timeout *time.Duration `long:"timeout" short:"t" description:"timeout"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "-n, --name")
+		assert.Contains(t, output, "optional name")
+		assert.Contains(t, output, "-c, --count")
+		assert.Contains(t, output, "optional count")
+		assert.Contains(t, output, "-v, --verbose")
+		assert.Contains(t, output, "-t, --timeout")
+	})
+
+	// Test invalid values for pointer types
+	t.Run("invalid int value", func(t *testing.T) {
+		type Config struct {
+			Count *int `long:"count" description:"count"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--count", "notanumber"})
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid duration value", func(t *testing.T) {
+		type Config struct {
+			Timeout *time.Duration `long:"timeout" description:"timeout"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--timeout", "notaduration"})
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid bool value", func(t *testing.T) {
+		type Config struct {
+			Verbose *bool `long:"verbose" description:"verbose"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--verbose=notabool"})
+		assert.Error(t, err)
+	})
+}
+
 func TestShortOnlyFlags(t *testing.T) {
 	// Test that short-only flags work in parsing
 	t.Run("parse short-only flag", func(t *testing.T) {
