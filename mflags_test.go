@@ -1712,6 +1712,147 @@ func TestShowHelp(t *testing.T) {
 	assert.Contains(t, output, "operation timeout")
 }
 
+// Tests for description tag alias for usage
+
+func TestDescriptionTagAsUsageAlias(t *testing.T) {
+	// Test that description tag works as an alias for usage
+	t.Run("description tag is used for help output", func(t *testing.T) {
+		type Config struct {
+			Verbose bool   `long:"verbose" short:"v" description:"Enable verbose output"`
+			Name    string `long:"name" short:"n" description:"Name to use"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		// Check that the flags have the correct usage text
+		verboseFlag := fs.Lookup("verbose")
+		assert.NotNil(t, verboseFlag)
+		assert.Equal(t, "Enable verbose output", verboseFlag.Usage)
+
+		nameFlag := fs.Lookup("name")
+		assert.NotNil(t, nameFlag)
+		assert.Equal(t, "Name to use", nameFlag.Usage)
+	})
+
+	// Test that usage tag takes precedence over description
+	t.Run("usage tag takes precedence over description", func(t *testing.T) {
+		type Config struct {
+			Verbose bool `long:"verbose" usage:"Usage text" description:"Description text"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		verboseFlag := fs.Lookup("verbose")
+		assert.NotNil(t, verboseFlag)
+		assert.Equal(t, "Usage text", verboseFlag.Usage)
+	})
+
+	// Test that description appears in help output
+	t.Run("description appears in help output", func(t *testing.T) {
+		type Config struct {
+			Output  string `long:"output" short:"o" description:"Output file path"`
+			Verbose bool   `long:"verbose" short:"v" description:"Enable verbose logging"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "Output file path")
+		assert.Contains(t, output, "Enable verbose logging")
+	})
+
+	// Test description with various field types
+	t.Run("description works with all field types", func(t *testing.T) {
+		type Config struct {
+			BoolField     bool          `long:"bool" description:"Bool description"`
+			StringField   string        `long:"string" description:"String description"`
+			IntField      int           `long:"int" description:"Int description"`
+			DurationField time.Duration `long:"duration" description:"Duration description"`
+			ArrayField    []string      `long:"array" description:"Array description"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "Bool description", fs.Lookup("bool").Usage)
+		assert.Equal(t, "String description", fs.Lookup("string").Usage)
+		assert.Equal(t, "Int description", fs.Lookup("int").Usage)
+		assert.Equal(t, "Duration description", fs.Lookup("duration").Usage)
+		assert.Equal(t, "Array description", fs.Lookup("array").Usage)
+	})
+
+	// Test that default usage is generated when neither tag is present
+	t.Run("default usage when no tags", func(t *testing.T) {
+		type Config struct {
+			SomeField string `long:"somefield"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		flag := fs.Lookup("somefield")
+		assert.NotNil(t, flag)
+		assert.Equal(t, "SomeField value", flag.Usage)
+	})
+
+	// Test description with embedded structs
+	t.Run("description works with embedded structs", func(t *testing.T) {
+		type BaseConfig struct {
+			Debug bool `long:"debug" description:"Enable debug mode"`
+		}
+
+		type AppConfig struct {
+			BaseConfig
+			Name string `long:"name" description:"Application name"`
+		}
+
+		config := &AppConfig{}
+		fs := NewFlagSet("myapp")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		debugFlag := fs.Lookup("debug")
+		assert.NotNil(t, debugFlag)
+		assert.Equal(t, "Enable debug mode", debugFlag.Usage)
+
+		nameFlag := fs.Lookup("name")
+		assert.NotNil(t, nameFlag)
+		assert.Equal(t, "Application name", nameFlag.Usage)
+	})
+}
+
 func TestShortOnlyFlags(t *testing.T) {
 	// Test that short-only flags work in parsing
 	t.Run("parse short-only flag", func(t *testing.T) {

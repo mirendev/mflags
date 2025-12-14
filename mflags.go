@@ -775,7 +775,7 @@ func (f *FlagSet) FromStruct(v any) error {
 		defaultValue := field.Tag.Get("default")
 		usage := field.Tag.Get("usage")
 		if usage == "" {
-			usage := field.Tag.Get("description")
+			usage = field.Tag.Get("description")
 			if usage == "" {
 				usage = fmt.Sprintf("%s value", field.Name)
 			}
