@@ -76,6 +76,36 @@ func (b *boolValue) Type() string {
 	return "bool"
 }
 
+type boolArrayValue []bool
+
+func (b *boolArrayValue) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*b = append(*b, v)
+	return nil
+}
+
+func (b *boolArrayValue) String() string {
+	if len(*b) == 0 {
+		return ""
+	}
+	strs := make([]string, len(*b))
+	for i, v := range *b {
+		strs[i] = strconv.FormatBool(v)
+	}
+	return strings.Join(strs, ",")
+}
+
+func (b *boolArrayValue) IsBool() bool {
+	return true
+}
+
+func (b *boolArrayValue) Type() string {
+	return "bool"
+}
+
 type stringValue string
 
 func (s *stringValue) Set(val string) error {
@@ -115,6 +145,36 @@ func (i *intValue) IsBool() bool {
 }
 
 func (i *intValue) Type() string {
+	return "int"
+}
+
+type intArrayValue []int
+
+func (i *intArrayValue) Set(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*i = append(*i, v)
+	return nil
+}
+
+func (i *intArrayValue) String() string {
+	if len(*i) == 0 {
+		return ""
+	}
+	strs := make([]string, len(*i))
+	for idx, v := range *i {
+		strs[idx] = strconv.Itoa(v)
+	}
+	return strings.Join(strs, ",")
+}
+
+func (i *intArrayValue) IsBool() bool {
+	return false
+}
+
+func (i *intArrayValue) Type() string {
 	return "int"
 }
 
@@ -234,6 +294,46 @@ func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []s
 func (f *FlagSet) StringArray(name string, short rune, value []string, usage string) *[]string {
 	p := new([]string)
 	f.StringArrayVar(p, name, short, value, usage)
+	return p
+}
+
+// BoolArrayVar defines a bool array flag with the specified name, short form, and usage string.
+// The argument p points to a []bool variable in which to store the values.
+// Each occurrence of the flag appends true to the slice, allowing patterns like "-v -v -v"
+// to count verbosity levels.
+func (f *FlagSet) BoolArrayVar(p *[]bool, name string, short rune, usage string) {
+	if *p == nil {
+		*p = []bool{}
+	}
+	f.Var((*boolArrayValue)(p), name, short, usage)
+}
+
+// BoolArray defines a bool array flag with the specified name, short form, and usage string.
+// The return value is the address of a []bool variable that stores the values.
+// Each occurrence of the flag appends true to the slice, allowing patterns like "-v -v -v"
+// to count verbosity levels.
+func (f *FlagSet) BoolArray(name string, short rune, usage string) *[]bool {
+	p := new([]bool)
+	f.BoolArrayVar(p, name, short, usage)
+	return p
+}
+
+// IntArrayVar defines an int array flag with the specified name, short form, and usage string.
+// The argument p points to a []int variable in which to store the values.
+// Each occurrence of the flag appends to the slice, allowing patterns like "-n 1 -n 2 -n 3".
+func (f *FlagSet) IntArrayVar(p *[]int, name string, short rune, usage string) {
+	if *p == nil {
+		*p = []int{}
+	}
+	f.Var((*intArrayValue)(p), name, short, usage)
+}
+
+// IntArray defines an int array flag with the specified name, short form, and usage string.
+// The return value is the address of a []int variable that stores the values.
+// Each occurrence of the flag appends to the slice, allowing patterns like "-n 1 -n 2 -n 3".
+func (f *FlagSet) IntArray(name string, short rune, usage string) *[]int {
+	p := new([]int)
+	f.IntArrayVar(p, name, short, usage)
 	return p
 }
 
@@ -801,12 +901,17 @@ func (f *FlagSet) FromStruct(v any) error {
 			f.IntVar(fieldValue.Addr().Interface().(*int), longName, short, defVal, usage)
 
 		case reflect.Slice:
-			if field.Type.Elem().Kind() == reflect.String {
+			switch field.Type.Elem().Kind() {
+			case reflect.String:
 				var defVal []string
 				if defaultValue != "" {
 					defVal = strings.Split(defaultValue, ",")
 				}
 				f.StringArrayVar(fieldValue.Addr().Interface().(*[]string), longName, short, defVal, usage)
+			case reflect.Bool:
+				f.BoolArrayVar(fieldValue.Addr().Interface().(*[]bool), longName, short, usage)
+			case reflect.Int:
+				f.IntArrayVar(fieldValue.Addr().Interface().(*[]int), longName, short, usage)
 			}
 
 		case reflect.Int64:

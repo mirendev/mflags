@@ -1853,6 +1853,448 @@ func TestDescriptionTagAsUsageAlias(t *testing.T) {
 	})
 }
 
+// Tests for []bool (repeatable bool flags)
+
+func TestBoolArrayFlag(t *testing.T) {
+	// Test basic repeated flag usage
+	t.Run("repeated long flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"--verbose", "--verbose", "--verbose"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, *verbose)
+	})
+
+	// Test repeated short flag
+	t.Run("repeated short flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"-v", "-v", "-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, *verbose)
+	})
+
+	// Test combined short flags
+	t.Run("combined short flags", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"-vvv"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, *verbose)
+	})
+
+	// Test mixed long and short
+	t.Run("mixed long and short", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"-v", "--verbose", "-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, *verbose)
+	})
+
+	// Test no occurrences
+	t.Run("no occurrences", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Empty(t, *verbose)
+	})
+
+	// Test single occurrence
+	t.Run("single occurrence", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true}, *verbose)
+	})
+
+	// Test with explicit value
+	t.Run("explicit true value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"--verbose=true", "--verbose=true"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true}, *verbose)
+	})
+
+	// Test with false value
+	t.Run("explicit false value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"--verbose=false", "--verbose=true"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{false, true}, *verbose)
+	})
+
+	// Test BoolArrayVar
+	t.Run("BoolArrayVar", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var verbose []bool
+		fs.BoolArrayVar(&verbose, "verbose", 'v', "verbosity level")
+
+		err := fs.Parse([]string{"-v", "-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true}, verbose)
+	})
+
+	// Test with other flags
+	t.Run("with other flags", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		verbose := fs.BoolArray("verbose", 'v', "verbosity level")
+		name := fs.String("name", 'n', "default", "name to use")
+		debug := fs.Bool("debug", 'd', false, "debug mode")
+
+		err := fs.Parse([]string{"-v", "--name", "test", "-v", "-d", "-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, *verbose)
+		assert.Equal(t, "test", *name)
+		assert.True(t, *debug)
+	})
+}
+
+func TestBoolArrayFromStruct(t *testing.T) {
+	// Test basic struct usage
+	t.Run("basic struct usage", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"verbosity level"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("test")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		err = fs.Parse([]string{"-v", "-v", "-v"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, config.Verbose)
+	})
+
+	// Test combined short flags with struct
+	t.Run("combined short flags with struct", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"verbosity level"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-vvvv"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true, true}, config.Verbose)
+	})
+
+	// Test with other fields
+	t.Run("with other fields", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"verbosity level"`
+			Name    string `long:"name" short:"n" description:"name to use"`
+			Debug   bool   `long:"debug" short:"d" description:"debug mode"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-v", "--name", "test", "-vv", "-d"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, config.Verbose)
+		assert.Equal(t, "test", config.Name)
+		assert.True(t, config.Debug)
+	})
+
+	// Test no occurrences
+	t.Run("no occurrences", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"verbosity level"`
+			Name    string `long:"name" short:"n" default:"default" description:"name to use"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--name", "test"})
+		assert.NoError(t, err)
+		assert.Empty(t, config.Verbose)
+		assert.Equal(t, "test", config.Name)
+	})
+
+	// Test counting pattern (common use case)
+	t.Run("counting pattern", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"increase verbosity"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-vvvvv"})
+		assert.NoError(t, err)
+		// Can use len() to get verbosity level
+		assert.Equal(t, 5, len(config.Verbose))
+	})
+
+	// Test in help output
+	t.Run("appears in help output", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"increase verbosity level"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "-v, --verbose")
+		assert.Contains(t, output, "increase verbosity level")
+	})
+}
+
+// Tests for []int (repeatable int flags)
+
+func TestIntArrayFlag(t *testing.T) {
+	// Test basic repeated flag usage
+	t.Run("repeated long flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"--num", "1", "--num", "2", "--num", "3"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3}, *nums)
+	})
+
+	// Test repeated short flag
+	t.Run("repeated short flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"-n", "10", "-n", "20", "-n", "30"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{10, 20, 30}, *nums)
+	})
+
+	// Test with equals syntax
+	t.Run("equals syntax", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"--num=100", "--num=200"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{100, 200}, *nums)
+	})
+
+	// Test no occurrences
+	t.Run("no occurrences", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Empty(t, *nums)
+	})
+
+	// Test single occurrence
+	t.Run("single occurrence", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"-n", "42"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{42}, *nums)
+	})
+
+	// Test with negative numbers
+	t.Run("negative numbers", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"--num=-5", "--num", "10", "--num=-15"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{-5, 10, -15}, *nums)
+	})
+
+	// Test IntArrayVar
+	t.Run("IntArrayVar", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var nums []int
+		fs.IntArrayVar(&nums, "num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"-n", "1", "-n", "2"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2}, nums)
+	})
+
+	// Test with other flags
+	t.Run("with other flags", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+		name := fs.String("name", 0, "default", "name to use")
+		verbose := fs.Bool("verbose", 'v', false, "verbose mode")
+
+		err := fs.Parse([]string{"-n", "1", "--name", "test", "-n", "2", "-v", "-n", "3"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3}, *nums)
+		assert.Equal(t, "test", *name)
+		assert.True(t, *verbose)
+	})
+
+	// Test invalid value
+	t.Run("invalid value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"-n", "notanumber"})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidValue)
+	})
+
+	// Test short flag with immediate value
+	t.Run("short flag with immediate value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		nums := fs.IntArray("num", 'n', "numbers to use")
+
+		err := fs.Parse([]string{"-n42", "-n99"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{42, 99}, *nums)
+	})
+}
+
+func TestIntArrayFromStruct(t *testing.T) {
+	// Test basic struct usage
+	t.Run("basic struct usage", func(t *testing.T) {
+		type Config struct {
+			Numbers []int `long:"num" short:"n" description:"numbers to process"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("test")
+
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		err = fs.Parse([]string{"-n", "1", "-n", "2", "-n", "3"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3}, config.Numbers)
+	})
+
+	// Test with ParseStruct
+	t.Run("with ParseStruct", func(t *testing.T) {
+		type Config struct {
+			Numbers []int `long:"num" short:"n" description:"numbers to process"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--num", "10", "--num", "20", "--num", "30"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{10, 20, 30}, config.Numbers)
+	})
+
+	// Test with other fields
+	t.Run("with other fields", func(t *testing.T) {
+		type Config struct {
+			Numbers []int  `long:"num" short:"n" description:"numbers to process"`
+			Name    string `long:"name" description:"name to use"`
+			Debug   bool   `long:"debug" short:"d" description:"debug mode"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-n", "1", "--name", "test", "-n", "2", "-d", "-n", "3"})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1, 2, 3}, config.Numbers)
+		assert.Equal(t, "test", config.Name)
+		assert.True(t, config.Debug)
+	})
+
+	// Test no occurrences
+	t.Run("no occurrences", func(t *testing.T) {
+		type Config struct {
+			Numbers []int  `long:"num" short:"n" description:"numbers to process"`
+			Name    string `long:"name" default:"default" description:"name to use"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"--name", "test"})
+		assert.NoError(t, err)
+		assert.Empty(t, config.Numbers)
+		assert.Equal(t, "test", config.Name)
+	})
+
+	// Test with []bool together
+	t.Run("with []bool together", func(t *testing.T) {
+		type Config struct {
+			Verbose []bool `long:"verbose" short:"v" description:"increase verbosity"`
+			Numbers []int  `long:"num" short:"n" description:"numbers to process"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-vv", "-n", "1", "-v", "-n", "2"})
+		assert.NoError(t, err)
+		assert.Equal(t, []bool{true, true, true}, config.Verbose)
+		assert.Equal(t, []int{1, 2}, config.Numbers)
+	})
+
+	// Test in help output
+	t.Run("appears in help output", func(t *testing.T) {
+		type Config struct {
+			Numbers []int `long:"num" short:"n" description:"numbers to process"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("myapp")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "-n, --num")
+		assert.Contains(t, output, "numbers to process")
+	})
+
+	// Test computing sum (practical use case)
+	t.Run("computing sum", func(t *testing.T) {
+		type Config struct {
+			Numbers []int `long:"num" short:"n" description:"numbers to add"`
+		}
+
+		config := &Config{}
+		err := ParseStruct(config, []string{"-n", "10", "-n", "20", "-n", "30"})
+		assert.NoError(t, err)
+
+		sum := 0
+		for _, n := range config.Numbers {
+			sum += n
+		}
+		assert.Equal(t, 60, sum)
+	})
+}
+
 func TestShortOnlyFlags(t *testing.T) {
 	// Test that short-only flags work in parsing
 	t.Run("parse short-only flag", func(t *testing.T) {
