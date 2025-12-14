@@ -27,7 +27,7 @@ type FlagSet struct {
 	name              string
 	flags             map[string]*Flag
 	shortMap          map[rune]*Flag
-	allFlags          []*Flag                  // All registered flags (for iteration)
+	allFlags          []*Flag // All registered flags (for iteration)
 	args              []string
 	parsed            bool
 	restField         *[]string                // Pointer to field marked with "rest" tag
@@ -688,6 +688,7 @@ func setFieldValue(fieldValue reflect.Value, value string) error {
 //   - `short:"x"` - short flag name (single character)
 //   - `default:"value"` - default value for the flag
 //   - `usage:"description"` - usage description
+//   - `description:"description"` - alternate usage description
 //   - `position:"0"` - positional argument at index 0
 //   - `rest:"true"` - capture all remaining arguments in a []string field
 //   - `unknown:"true"` - capture unknown flags in a []string field (automatically enables AllowUnknownFlags)
@@ -774,7 +775,10 @@ func (f *FlagSet) FromStruct(v any) error {
 		defaultValue := field.Tag.Get("default")
 		usage := field.Tag.Get("usage")
 		if usage == "" {
-			usage = fmt.Sprintf("%s value", field.Name)
+			usage := field.Tag.Get("description")
+			if usage == "" {
+				usage = fmt.Sprintf("%s value", field.Name)
+			}
 		}
 
 		// Register the flag based on field type
