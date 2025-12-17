@@ -1712,6 +1712,125 @@ func TestShowHelp(t *testing.T) {
 	assert.Contains(t, output, "operation timeout")
 }
 
+func TestShowHelpWithPositionalArguments(t *testing.T) {
+	t.Run("positional arguments shown by name", func(t *testing.T) {
+		type Config struct {
+			Verbose     bool   `long:"verbose" short:"v" description:"Enable verbose output"`
+			Environment string `position:"0"`
+			Version     string `position:"1"`
+		}
+
+		fs := NewFlagSet("deploy")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "Usage: deploy [options] <environment> <version>")
+		assert.NotContains(t, output, "[arguments]")
+	})
+
+	t.Run("positional arguments with rest field", func(t *testing.T) {
+		type Config struct {
+			Verbose bool     `long:"verbose" short:"v" description:"Enable verbose output"`
+			Command string   `position:"0"`
+			Args    []string `rest:"true"`
+		}
+
+		fs := NewFlagSet("runner")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "Usage: runner [options] <command> [arguments...]")
+	})
+
+	t.Run("only rest field shows arguments", func(t *testing.T) {
+		type Config struct {
+			Verbose bool     `long:"verbose" short:"v" description:"Enable verbose output"`
+			Args    []string `rest:"true"`
+		}
+
+		fs := NewFlagSet("echo")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "Usage: echo [options] [arguments...]")
+	})
+
+	t.Run("non-contiguous positional arguments", func(t *testing.T) {
+		type Config struct {
+			First  string `position:"0"`
+			Third  string `position:"2"`
+			Second string `position:"1"`
+		}
+
+		fs := NewFlagSet("app")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		// Should show in position order regardless of struct field order
+		assert.Contains(t, output, "Usage: app [options] <first> <second> <third>")
+	})
+}
+
 // Tests for description tag alias for usage
 
 func TestDescriptionTagAsUsageAlias(t *testing.T) {
@@ -2472,8 +2591,8 @@ func TestPointerTypesFromStruct(t *testing.T) {
 	// Test practical use case - conditional logic based on nil
 	t.Run("practical use case - conditional logic", func(t *testing.T) {
 		type Config struct {
-			Port    *int    `long:"port" short:"p" description:"port number"`
-			Host    *string `long:"host" short:"h" description:"hostname"`
+			Port    *int           `long:"port" short:"p" description:"port number"`
+			Host    *string        `long:"host" short:"h" description:"hostname"`
 			Timeout *time.Duration `long:"timeout" description:"connection timeout"`
 		}
 

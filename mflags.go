@@ -1071,16 +1071,24 @@ func (f *FlagSet) FromStruct(v any) error {
 func (f *FlagSet) ShowHelp() {
 	if f.name != "" {
 		fmt.Printf("Usage: %s [options]", f.name)
-		// Check if there are positional arguments expected
-		hasPositional := false
+		// Show positional arguments by name
 		if len(f.posFields) > 0 {
-			hasPositional = true
+			// Find max position to iterate in order
+			maxPos := -1
+			for pos := range f.posFields {
+				if pos > maxPos {
+					maxPos = pos
+				}
+			}
+			// Print each positional argument name
+			for i := 0; i <= maxPos; i++ {
+				if field, ok := f.posFields[i]; ok {
+					fmt.Printf(" <%s>", strings.ToLower(field.Name))
+				}
+			}
 		}
 		if f.restField != nil {
-			hasPositional = true
-		}
-		if hasPositional {
-			fmt.Print(" [arguments]")
+			fmt.Print(" [arguments...]")
 		}
 		fmt.Println()
 	}
