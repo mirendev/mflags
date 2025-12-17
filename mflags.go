@@ -20,6 +20,7 @@ var (
 // PositionalField represents a positional argument field
 type PositionalField struct {
 	Name  string        // Field name (e.g., "Command", "Target")
+	Usage string        // Usage description for help output
 	Value reflect.Value // The reflect.Value of the field
 	Type  reflect.Type  // The type of the field
 }
@@ -477,6 +478,7 @@ func (f *FlagSet) BoolPosVar(p *bool, name string, position int, value bool, usa
 	*p = value
 	f.posFields[position] = &PositionalField{
 		Name:  name,
+		Usage: usage,
 		Value: reflect.ValueOf(p).Elem(),
 		Type:  reflect.TypeOf(*p),
 	}
@@ -498,6 +500,7 @@ func (f *FlagSet) StringPosVar(p *string, name string, position int, value strin
 	*p = value
 	f.posFields[position] = &PositionalField{
 		Name:  name,
+		Usage: usage,
 		Value: reflect.ValueOf(p).Elem(),
 		Type:  reflect.TypeOf(*p),
 	}
@@ -519,6 +522,7 @@ func (f *FlagSet) IntPosVar(p *int, name string, position int, value int, usage 
 	*p = value
 	f.posFields[position] = &PositionalField{
 		Name:  name,
+		Usage: usage,
 		Value: reflect.ValueOf(p).Elem(),
 		Type:  reflect.TypeOf(*p),
 	}
@@ -540,6 +544,7 @@ func (f *FlagSet) DurationPosVar(p *time.Duration, name string, position int, va
 	*p = value
 	f.posFields[position] = &PositionalField{
 		Name:  name,
+		Usage: usage,
 		Value: reflect.ValueOf(p).Elem(),
 		Type:  reflect.TypeOf(*p),
 	}
@@ -946,8 +951,14 @@ func (f *FlagSet) FromStruct(v any) error {
 		if posStr := field.Tag.Get("position"); posStr != "" {
 			pos, err := strconv.Atoi(posStr)
 			if err == nil && pos >= 0 {
+				// Get usage from either "usage" or "description" tag
+				posUsage := field.Tag.Get("usage")
+				if posUsage == "" {
+					posUsage = field.Tag.Get("description")
+				}
 				f.posFields[pos] = &PositionalField{
 					Name:  field.Name,
+					Usage: posUsage,
 					Value: fieldValue,
 					Type:  field.Type,
 				}
@@ -1091,6 +1102,35 @@ func (f *FlagSet) ShowHelp() {
 			fmt.Print(" [arguments...]")
 		}
 		fmt.Println()
+	}
+
+	// Show positional arguments with descriptions if any have usage text
+	if len(f.posFields) > 0 {
+		// Find max position to iterate in order
+		maxPos := -1
+		hasUsage := false
+		for pos, field := range f.posFields {
+			if pos > maxPos {
+				maxPos = pos
+			}
+			if field.Usage != "" {
+				hasUsage = true
+			}
+		}
+
+		if hasUsage {
+			fmt.Println("\nArguments:")
+			for i := 0; i <= maxPos; i++ {
+				if field, ok := f.posFields[i]; ok {
+					argStr := fmt.Sprintf("  <%s>", strings.ToLower(field.Name))
+					if field.Usage != "" {
+						fmt.Printf("%-30s %s\n", argStr, field.Usage)
+					} else {
+						fmt.Println(argStr)
+					}
+				}
+			}
+		}
 	}
 
 	// Show flags if any are defined

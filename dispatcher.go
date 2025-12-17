@@ -429,22 +429,59 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 	fmt.Printf("Usage: %s %s [options]", d.name, entry.Path)
 	fs := entry.Command.FlagSet()
 	if fs != nil {
-		// Check if there are positional arguments expected
-		hasPositional := false
+		// Show positional arguments by name
 		if len(fs.posFields) > 0 {
-			hasPositional = true
+			// Find max position to iterate in order
+			maxPos := -1
+			for pos := range fs.posFields {
+				if pos > maxPos {
+					maxPos = pos
+				}
+			}
+			// Print each positional argument name
+			for i := 0; i <= maxPos; i++ {
+				if field, ok := fs.posFields[i]; ok {
+					fmt.Printf(" <%s>", strings.ToLower(field.Name))
+				}
+			}
 		}
 		if fs.restField != nil {
-			hasPositional = true
-		}
-		if hasPositional {
-			fmt.Print(" [arguments]")
+			fmt.Print(" [arguments...]")
 		}
 	}
 	fmt.Println()
 
 	if entry.Usage != "" {
 		fmt.Printf("\n%s\n", entry.Usage)
+	}
+
+	// Show positional arguments with descriptions if any have usage text
+	if fs != nil && len(fs.posFields) > 0 {
+		// Find max position to iterate in order
+		maxPos := -1
+		hasUsage := false
+		for pos, field := range fs.posFields {
+			if pos > maxPos {
+				maxPos = pos
+			}
+			if field.Usage != "" {
+				hasUsage = true
+			}
+		}
+
+		if hasUsage {
+			fmt.Println("\nArguments:")
+			for i := 0; i <= maxPos; i++ {
+				if field, ok := fs.posFields[i]; ok {
+					argStr := fmt.Sprintf("  <%s>", strings.ToLower(field.Name))
+					if field.Usage != "" {
+						fmt.Printf("%-30s %s\n", argStr, field.Usage)
+					} else {
+						fmt.Println(argStr)
+					}
+				}
+			}
+		}
 	}
 
 	// Show flags if any are defined

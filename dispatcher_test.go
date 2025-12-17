@@ -196,6 +196,122 @@ func TestDispatcherCommandHelp(t *testing.T) {
 	assert.Contains(t, output, "verbose output")
 }
 
+func TestDispatcherCommandHelpWithPositionalArguments(t *testing.T) {
+	t.Run("positional arguments shown by name with descriptions", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		type Config struct {
+			Verbose     bool   `long:"verbose" short:"v" description:"Enable verbose output"`
+			Environment string `position:"0" usage:"Target environment (dev, staging, prod)"`
+			Version     string `position:"1" usage:"Version to deploy"`
+		}
+
+		fs := NewFlagSet("deploy")
+		var cfg Config
+		fs.FromStruct(&cfg)
+
+		d.Dispatch("deploy", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Deploy to an environment")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"deploy", "--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp deploy [options] <environment> <version>")
+		assert.NotContains(t, output, "[arguments]")
+		assert.Contains(t, output, "Arguments:")
+		assert.Contains(t, output, "<environment>")
+		assert.Contains(t, output, "Target environment (dev, staging, prod)")
+		assert.Contains(t, output, "<version>")
+		assert.Contains(t, output, "Version to deploy")
+	})
+
+	t.Run("positional arguments with rest field", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		type Config struct {
+			Verbose bool     `long:"verbose" short:"v" description:"Enable verbose output"`
+			Command string   `position:"0" usage:"Command to execute"`
+			Args    []string `rest:"true"`
+		}
+
+		fs := NewFlagSet("exec")
+		var cfg Config
+		fs.FromStruct(&cfg)
+
+		d.Dispatch("exec", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Execute a command")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"exec", "--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp exec [options] <command> [arguments...]")
+		assert.Contains(t, output, "Arguments:")
+		assert.Contains(t, output, "Command to execute")
+	})
+
+	t.Run("only rest field shows arguments", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		type Config struct {
+			Verbose bool     `long:"verbose" short:"v" description:"Enable verbose output"`
+			Args    []string `rest:"true"`
+		}
+
+		fs := NewFlagSet("echo")
+		var cfg Config
+		fs.FromStruct(&cfg)
+
+		d.Dispatch("echo", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Echo arguments")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"echo", "--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp echo [options] [arguments...]")
+		// No Arguments: section when no positional args have usage
+		assert.NotContains(t, output, "Arguments:")
+	})
+}
+
 func TestDispatcherErrorHandling(t *testing.T) {
 	d := NewDispatcher("myapp")
 

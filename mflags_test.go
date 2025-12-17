@@ -1713,11 +1713,11 @@ func TestShowHelp(t *testing.T) {
 }
 
 func TestShowHelpWithPositionalArguments(t *testing.T) {
-	t.Run("positional arguments shown by name", func(t *testing.T) {
+	t.Run("positional arguments shown by name with descriptions", func(t *testing.T) {
 		type Config struct {
 			Verbose     bool   `long:"verbose" short:"v" description:"Enable verbose output"`
-			Environment string `position:"0"`
-			Version     string `position:"1"`
+			Environment string `position:"0" usage:"Target environment (dev, staging, prod)"`
+			Version     string `position:"1" usage:"Version to deploy"`
 		}
 
 		fs := NewFlagSet("deploy")
@@ -1741,12 +1741,17 @@ func TestShowHelpWithPositionalArguments(t *testing.T) {
 
 		assert.Contains(t, output, "Usage: deploy [options] <environment> <version>")
 		assert.NotContains(t, output, "[arguments]")
+		assert.Contains(t, output, "Arguments:")
+		assert.Contains(t, output, "<environment>")
+		assert.Contains(t, output, "Target environment (dev, staging, prod)")
+		assert.Contains(t, output, "<version>")
+		assert.Contains(t, output, "Version to deploy")
 	})
 
 	t.Run("positional arguments with rest field", func(t *testing.T) {
 		type Config struct {
 			Verbose bool     `long:"verbose" short:"v" description:"Enable verbose output"`
-			Command string   `position:"0"`
+			Command string   `position:"0" usage:"Command to execute"`
 			Args    []string `rest:"true"`
 		}
 
@@ -1770,6 +1775,8 @@ func TestShowHelpWithPositionalArguments(t *testing.T) {
 		output := buf.String()
 
 		assert.Contains(t, output, "Usage: runner [options] <command> [arguments...]")
+		assert.Contains(t, output, "Arguments:")
+		assert.Contains(t, output, "Command to execute")
 	})
 
 	t.Run("only rest field shows arguments", func(t *testing.T) {
@@ -1798,6 +1805,8 @@ func TestShowHelpWithPositionalArguments(t *testing.T) {
 		output := buf.String()
 
 		assert.Contains(t, output, "Usage: echo [options] [arguments...]")
+		// No Arguments: section when no positional args have usage
+		assert.NotContains(t, output, "Arguments:")
 	})
 
 	t.Run("non-contiguous positional arguments", func(t *testing.T) {
@@ -1828,6 +1837,38 @@ func TestShowHelpWithPositionalArguments(t *testing.T) {
 
 		// Should show in position order regardless of struct field order
 		assert.Contains(t, output, "Usage: app [options] <first> <second> <third>")
+		// No Arguments: section when no positional args have usage
+		assert.NotContains(t, output, "Arguments:")
+	})
+
+	t.Run("positional arguments without usage don't show Arguments section", func(t *testing.T) {
+		type Config struct {
+			Verbose bool   `long:"verbose" short:"v" description:"Enable verbose output"`
+			Name    string `position:"0"`
+		}
+
+		fs := NewFlagSet("greet")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		fs.ShowHelp()
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.Contains(t, output, "Usage: greet [options] <name>")
+		// No Arguments: section when no positional args have usage
+		assert.NotContains(t, output, "Arguments:")
 	})
 }
 
