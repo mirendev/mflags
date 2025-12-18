@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	ErrUnknownFlag  = errors.New("unknown flag")
-	ErrMissingValue = errors.New("flag needs an argument")
-	ErrInvalidValue = errors.New("invalid flag value")
-	ErrHelp         = errors.New("help requested")
-	ErrShowHelp     = errors.New("show help") // Return from Command.Run to trigger help display
+	ErrUnknownFlag   = errors.New("unknown flag")
+	ErrMissingValue  = errors.New("flag needs an argument")
+	ErrInvalidValue  = errors.New("invalid flag value")
+	ErrInvalidChoice = errors.New("invalid choice")
+	ErrHelp          = errors.New("help requested")
+	ErrShowHelp      = errors.New("show help") // Return from Command.Run to trigger help display
 )
 
 // PositionalField represents a positional argument field
@@ -337,6 +338,43 @@ func (d *durationPtrValue) Type() string {
 	return "duration"
 }
 
+// choiceValue represents a string flag that only accepts specific values.
+// It validates inputs against a predefined set of choices.
+type choiceValue struct {
+	value   *string
+	choices []string
+}
+
+func (c *choiceValue) Set(s string) error {
+	for _, choice := range c.choices {
+		if s == choice {
+			*c.value = s
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %q (valid: %s)", ErrInvalidChoice, s, strings.Join(c.choices, ", "))
+}
+
+func (c *choiceValue) String() string {
+	if c.value == nil {
+		return ""
+	}
+	return *c.value
+}
+
+func (c *choiceValue) IsBool() bool {
+	return false
+}
+
+func (c *choiceValue) Type() string {
+	return strings.Join(c.choices, "|")
+}
+
+// Choices returns the valid choices for this value
+func (c *choiceValue) Choices() []string {
+	return c.choices
+}
+
 // NewFlagSet returns a new, empty flag set with the specified name.
 // The name is used for error messages and help output.
 func NewFlagSet(name string) *FlagSet {
@@ -468,6 +506,25 @@ func (f *FlagSet) DurationVar(p *time.Duration, name string, short rune, value t
 func (f *FlagSet) Duration(name string, short rune, value time.Duration, usage string) *time.Duration {
 	p := new(time.Duration)
 	f.DurationVar(p, name, short, value, usage)
+	return p
+}
+
+// ChoiceVar defines a string flag that only accepts values from a predefined set of choices.
+// The argument p points to a string variable in which to store the value of the flag.
+// The value argument is the default value, which must be one of the provided choices (or empty).
+// If an invalid choice is provided during parsing, ErrInvalidChoice is returned.
+func (f *FlagSet) ChoiceVar(p *string, name string, short rune, value string, choices []string, usage string) {
+	*p = value
+	f.Var(&choiceValue{value: p, choices: choices}, name, short, usage)
+}
+
+// Choice defines a string flag that only accepts values from a predefined set of choices.
+// The return value is the address of a string variable that stores the value of the flag.
+// The value argument is the default value, which must be one of the provided choices (or empty).
+// If an invalid choice is provided during parsing, ErrInvalidChoice is returned.
+func (f *FlagSet) Choice(name string, short rune, value string, choices []string, usage string) *string {
+	p := new(string)
+	f.ChoiceVar(p, name, short, value, choices, usage)
 	return p
 }
 
@@ -860,6 +917,50 @@ func (f *FlagSet) UnknownFlags() []string {
 	return f.unknownFlags
 }
 
+// getTagValues extracts all values for a given key from a struct tag.
+// This is needed because Go's tag.Get() only returns the first value,
+// but we need to support multiple values (e.g., multiple choice tags).
+func getTagValues(tag reflect.StructTag, key string) []string {
+	var values []string
+	tagStr := string(tag)
+	searchKey := key + `:`
+
+	for {
+		idx := strings.Index(tagStr, searchKey)
+		if idx < 0 {
+			break
+		}
+
+		// Move past the key and colon
+		tagStr = tagStr[idx+len(searchKey):]
+
+		// Find the quoted value
+		if len(tagStr) == 0 || tagStr[0] != '"' {
+			break
+		}
+
+		// Find the closing quote
+		endIdx := 1
+		for endIdx < len(tagStr) && tagStr[endIdx] != '"' {
+			if tagStr[endIdx] == '\\' && endIdx+1 < len(tagStr) {
+				endIdx += 2 // Skip escaped character
+			} else {
+				endIdx++
+			}
+		}
+
+		if endIdx < len(tagStr) {
+			value := tagStr[1:endIdx]
+			values = append(values, value)
+			tagStr = tagStr[endIdx+1:]
+		} else {
+			break
+		}
+	}
+
+	return values
+}
+
 // setFieldValue sets a string value to a reflect.Value based on its type
 func setFieldValue(fieldValue reflect.Value, value string) error {
 	switch fieldValue.Kind() {
@@ -910,6 +1011,7 @@ func setFieldValue(fieldValue reflect.Value, value string) error {
 //   - `default:"value"` - default value for the flag
 //   - `usage:"description"` - usage description
 //   - `description:"description"` - alternate usage description
+//   - `choice:"value"` - constrain string field to specific values (can be repeated for multiple choices)
 //   - `position:"0"` - positional argument at index 0
 //   - `rest:"true"` - capture all remaining arguments in a []string field
 //   - `unknown:"true"` - capture unknown flags in a []string field (automatically enables AllowUnknownFlags)
@@ -1018,7 +1120,13 @@ func (f *FlagSet) FromStruct(v any) error {
 			f.BoolVar(fieldValue.Addr().Interface().(*bool), longName, short, defVal, usage)
 
 		case reflect.String:
-			f.StringVar(fieldValue.Addr().Interface().(*string), longName, short, defaultValue, usage)
+			// Check for choice tags - if present, use ChoiceVar
+			choices := getTagValues(field.Tag, "choice")
+			if len(choices) > 0 {
+				f.ChoiceVar(fieldValue.Addr().Interface().(*string), longName, short, defaultValue, choices, usage)
+			} else {
+				f.StringVar(fieldValue.Addr().Interface().(*string), longName, short, defaultValue, usage)
+			}
 
 		case reflect.Int:
 			var defVal int

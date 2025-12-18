@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -2835,4 +2836,253 @@ func TestShortOnlyFlags(t *testing.T) {
 		assert.True(t, *quiet)
 		assert.True(t, *debug)
 	})
+}
+
+// Tests for Choice/enum flags
+func TestChoiceFlag(t *testing.T) {
+	fs := NewFlagSet("test")
+	level := fs.Choice("level", 'l', "", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"--level", "info"})
+	assert.NoError(t, err)
+	assert.Equal(t, "info", *level)
+}
+
+func TestChoiceFlagShort(t *testing.T) {
+	fs := NewFlagSet("test")
+	level := fs.Choice("level", 'l', "", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"-l", "warn"})
+	assert.NoError(t, err)
+	assert.Equal(t, "warn", *level)
+}
+
+func TestChoiceFlagWithEquals(t *testing.T) {
+	fs := NewFlagSet("test")
+	level := fs.Choice("level", 'l', "", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"--level=error"})
+	assert.NoError(t, err)
+	assert.Equal(t, "error", *level)
+}
+
+func TestChoiceFlagDefault(t *testing.T) {
+	fs := NewFlagSet("test")
+	level := fs.Choice("level", 'l', "info", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "info", *level)
+}
+
+func TestChoiceFlagInvalidValue(t *testing.T) {
+	fs := NewFlagSet("test")
+	_ = fs.Choice("level", 'l', "", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"--level", "trace"})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidValue)
+	assert.Contains(t, err.Error(), "invalid choice")
+	assert.Contains(t, err.Error(), "trace")
+	assert.Contains(t, err.Error(), "debug, info, warn, error")
+}
+
+func TestChoiceFlagInvalidValueShort(t *testing.T) {
+	fs := NewFlagSet("test")
+	_ = fs.Choice("level", 'l', "", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"-l", "invalid"})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidValue)
+	assert.Contains(t, err.Error(), "invalid choice")
+}
+
+func TestChoiceVar(t *testing.T) {
+	fs := NewFlagSet("test")
+	var level string
+	fs.ChoiceVar(&level, "level", 'l', "warn", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{"--level", "debug"})
+	assert.NoError(t, err)
+	assert.Equal(t, "debug", level)
+}
+
+func TestChoiceVarDefault(t *testing.T) {
+	fs := NewFlagSet("test")
+	var level string
+	fs.ChoiceVar(&level, "level", 'l', "warn", []string{"debug", "info", "warn", "error"}, "log level")
+
+	err := fs.Parse([]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "warn", level)
+}
+
+func TestChoiceFromStruct(t *testing.T) {
+	type Config struct {
+		Level string `long:"level" short:"l" choice:"debug" choice:"info" choice:"warn" choice:"error" usage:"log level"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--level", "info"})
+	assert.NoError(t, err)
+	assert.Equal(t, "info", config.Level)
+}
+
+func TestChoiceFromStructShort(t *testing.T) {
+	type Config struct {
+		Level string `long:"level" short:"l" choice:"debug" choice:"info" choice:"warn" choice:"error"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"-l", "warn"})
+	assert.NoError(t, err)
+	assert.Equal(t, "warn", config.Level)
+}
+
+func TestChoiceFromStructWithDefault(t *testing.T) {
+	type Config struct {
+		Level string `long:"level" short:"l" default:"info" choice:"debug" choice:"info" choice:"warn" choice:"error"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "info", config.Level)
+}
+
+func TestChoiceFromStructInvalid(t *testing.T) {
+	type Config struct {
+		Level string `long:"level" short:"l" choice:"debug" choice:"info" choice:"warn" choice:"error"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--level", "trace"})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidValue)
+	assert.Contains(t, err.Error(), "invalid choice")
+}
+
+func TestChoiceHelpOutput(t *testing.T) {
+	fs := NewFlagSet("myapp")
+	_ = fs.Choice("level", 'l', "info", []string{"debug", "info", "warn", "error"}, "log level")
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	fs.ShowHelp()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Check that choices are displayed in the type placeholder
+	assert.Contains(t, output, "debug|info|warn|error")
+	assert.Contains(t, output, "-l, --level")
+	assert.Contains(t, output, "log level")
+	assert.Contains(t, output, "(default: info)")
+}
+
+func TestChoiceFromStructHelpOutput(t *testing.T) {
+	type Config struct {
+		Level string `long:"level" short:"l" default:"warn" choice:"debug" choice:"info" choice:"warn" choice:"error" usage:"log level"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("myapp")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	fs.ShowHelp()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Check that choices are displayed
+	assert.Contains(t, output, "debug|info|warn|error")
+	assert.Contains(t, output, "-l, --level")
+	assert.Contains(t, output, "log level")
+	assert.Contains(t, output, "(default: warn)")
+}
+
+func TestChoiceValueType(t *testing.T) {
+	cv := &choiceValue{
+		value:   new(string),
+		choices: []string{"a", "b", "c"},
+	}
+	assert.Equal(t, "a|b|c", cv.Type())
+	assert.False(t, cv.IsBool())
+}
+
+func TestChoiceValueChoices(t *testing.T) {
+	cv := &choiceValue{
+		value:   new(string),
+		choices: []string{"x", "y", "z"},
+	}
+	assert.Equal(t, []string{"x", "y", "z"}, cv.Choices())
+}
+
+func TestGetTagValues(t *testing.T) {
+	type Test struct {
+		Field string `choice:"a" choice:"b" choice:"c"`
+	}
+
+	rt := reflect.TypeOf(Test{})
+	field, _ := rt.FieldByName("Field")
+	choices := getTagValues(field.Tag, "choice")
+
+	assert.Equal(t, []string{"a", "b", "c"}, choices)
+}
+
+func TestGetTagValuesEmpty(t *testing.T) {
+	type Test struct {
+		Field string `long:"field"`
+	}
+
+	rt := reflect.TypeOf(Test{})
+	field, _ := rt.FieldByName("Field")
+	choices := getTagValues(field.Tag, "choice")
+
+	assert.Empty(t, choices)
+}
+
+func TestGetTagValuesMixed(t *testing.T) {
+	type Test struct {
+		Field string `long:"level" short:"l" choice:"debug" default:"info" choice:"info" usage:"log level" choice:"warn"`
+	}
+
+	rt := reflect.TypeOf(Test{})
+	field, _ := rt.FieldByName("Field")
+	choices := getTagValues(field.Tag, "choice")
+
+	assert.Equal(t, []string{"debug", "info", "warn"}, choices)
 }
