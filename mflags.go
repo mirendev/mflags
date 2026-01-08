@@ -181,15 +181,26 @@ func (i *intArrayValue) Type() string {
 	return "int"
 }
 
-type stringArrayValue []string
+type stringArrayValue struct {
+	values  *[]string
+	hasBeenSet bool
+}
 
 func (s *stringArrayValue) Set(val string) error {
-	*s = strings.Split(val, ",")
+	// On first Set call, clear any default values
+	if !s.hasBeenSet {
+		*s.values = nil
+		s.hasBeenSet = true
+	}
+	*s.values = append(*s.values, strings.Split(val, ",")...)
 	return nil
 }
 
 func (s *stringArrayValue) String() string {
-	return strings.Join(*s, ",")
+	if s.values == nil {
+		return ""
+	}
+	return strings.Join(*s.values, ",")
 }
 
 func (s *stringArrayValue) IsBool() bool {
@@ -440,7 +451,7 @@ func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []s
 	} else {
 		*p = []string{}
 	}
-	f.Var((*stringArrayValue)(p), name, short, usage)
+	f.Var(&stringArrayValue{values: p}, name, short, usage)
 }
 
 // StringArray defines a string array flag with the specified name, short form, default value, and usage string.

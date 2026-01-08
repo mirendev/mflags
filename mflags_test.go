@@ -401,6 +401,34 @@ func TestStringArrayMixedWithOtherFlags(t *testing.T) {
 	assert.Equal(t, []string{"arg1"}, fs.Args())
 }
 
+func TestStringArrayRepeatedShortFlag(t *testing.T) {
+	fs := NewFlagSet("test")
+	tags := fs.StringArray("tags", 't', nil, "tags to apply")
+
+	err := fs.Parse([]string{"-t", "foo", "-t", "bar", "-t", "baz"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"foo", "bar", "baz"}, *tags)
+}
+
+func TestStringArrayRepeatedLongFlag(t *testing.T) {
+	fs := NewFlagSet("test")
+	tags := fs.StringArray("tags", 't', nil, "tags to apply")
+
+	err := fs.Parse([]string{"--tags", "foo", "--tags", "bar", "--tags", "baz"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"foo", "bar", "baz"}, *tags)
+}
+
+func TestStringArrayRepeatedMixedWithCommas(t *testing.T) {
+	fs := NewFlagSet("test")
+	tags := fs.StringArray("tags", 't', nil, "tags to apply")
+
+	// Mix of repeated flags and comma-separated values
+	err := fs.Parse([]string{"-t", "foo,bar", "-t", "baz"})
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"foo", "bar", "baz"}, *tags)
+}
+
 func TestDurationFlag(t *testing.T) {
 	fs := NewFlagSet("test")
 	timeout := fs.Duration("timeout", 't', 0, "timeout duration")
