@@ -151,6 +151,213 @@ func (i *intValue) Type() string {
 	return "int"
 }
 
+type int64Value int64
+
+func (i *int64Value) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i = int64Value(v)
+	return nil
+}
+
+func (i *int64Value) String() string {
+	return strconv.FormatInt(int64(*i), 10)
+}
+
+func (i *int64Value) IsBool() bool {
+	return false
+}
+
+func (i *int64Value) Type() string {
+	return "int"
+}
+
+type int8Value int8
+
+func (i *int8Value) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 8)
+	if err != nil {
+		return err
+	}
+	*i = int8Value(v)
+	return nil
+}
+
+func (i *int8Value) String() string {
+	return strconv.FormatInt(int64(*i), 10)
+}
+
+func (i *int8Value) IsBool() bool {
+	return false
+}
+
+func (i *int8Value) Type() string {
+	return "int"
+}
+
+type int16Value int16
+
+func (i *int16Value) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 16)
+	if err != nil {
+		return err
+	}
+	*i = int16Value(v)
+	return nil
+}
+
+func (i *int16Value) String() string {
+	return strconv.FormatInt(int64(*i), 10)
+}
+
+func (i *int16Value) IsBool() bool {
+	return false
+}
+
+func (i *int16Value) Type() string {
+	return "int"
+}
+
+type int32Value int32
+
+func (i *int32Value) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return err
+	}
+	*i = int32Value(v)
+	return nil
+}
+
+func (i *int32Value) String() string {
+	return strconv.FormatInt(int64(*i), 10)
+}
+
+func (i *int32Value) IsBool() bool {
+	return false
+}
+
+func (i *int32Value) Type() string {
+	return "int"
+}
+
+type uintValue uint
+
+func (i *uintValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i = uintValue(v)
+	return nil
+}
+
+func (i *uintValue) String() string {
+	return strconv.FormatUint(uint64(*i), 10)
+}
+
+func (i *uintValue) IsBool() bool {
+	return false
+}
+
+func (i *uintValue) Type() string {
+	return "uint"
+}
+
+type uint8Value uint8
+
+func (i *uint8Value) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		return err
+	}
+	*i = uint8Value(v)
+	return nil
+}
+
+func (i *uint8Value) String() string {
+	return strconv.FormatUint(uint64(*i), 10)
+}
+
+func (i *uint8Value) IsBool() bool {
+	return false
+}
+
+func (i *uint8Value) Type() string {
+	return "uint"
+}
+
+type uint16Value uint16
+
+func (i *uint16Value) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		return err
+	}
+	*i = uint16Value(v)
+	return nil
+}
+
+func (i *uint16Value) String() string {
+	return strconv.FormatUint(uint64(*i), 10)
+}
+
+func (i *uint16Value) IsBool() bool {
+	return false
+}
+
+func (i *uint16Value) Type() string {
+	return "uint"
+}
+
+type uint32Value uint32
+
+func (i *uint32Value) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return err
+	}
+	*i = uint32Value(v)
+	return nil
+}
+
+func (i *uint32Value) String() string {
+	return strconv.FormatUint(uint64(*i), 10)
+}
+
+func (i *uint32Value) IsBool() bool {
+	return false
+}
+
+func (i *uint32Value) Type() string {
+	return "uint"
+}
+
+type uint64Value uint64
+
+func (i *uint64Value) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i = uint64Value(v)
+	return nil
+}
+
+func (i *uint64Value) String() string {
+	return strconv.FormatUint(uint64(*i), 10)
+}
+
+func (i *uint64Value) IsBool() bool {
+	return false
+}
+
+func (i *uint64Value) Type() string {
+	return "uint"
+}
+
 type intArrayValue []int
 
 func (i *intArrayValue) Set(s string) error {
@@ -320,6 +527,267 @@ func (i *intPtrValue) Type() string {
 	return "int"
 }
 
+type int64PtrValue struct {
+	p **int64
+}
+
+func (i *int64PtrValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i.p = new(int64)
+	**i.p = v
+	return nil
+}
+
+func (i *int64PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatInt(**i.p, 10)
+}
+
+func (i *int64PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *int64PtrValue) Type() string {
+	return "int"
+}
+
+type int8PtrValue struct {
+	p **int8
+}
+
+func (i *int8PtrValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 8)
+	if err != nil {
+		return err
+	}
+	*i.p = new(int8)
+	**i.p = int8(v)
+	return nil
+}
+
+func (i *int8PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatInt(int64(**i.p), 10)
+}
+
+func (i *int8PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *int8PtrValue) Type() string {
+	return "int"
+}
+
+type int16PtrValue struct {
+	p **int16
+}
+
+func (i *int16PtrValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 16)
+	if err != nil {
+		return err
+	}
+	*i.p = new(int16)
+	**i.p = int16(v)
+	return nil
+}
+
+func (i *int16PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatInt(int64(**i.p), 10)
+}
+
+func (i *int16PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *int16PtrValue) Type() string {
+	return "int"
+}
+
+type int32PtrValue struct {
+	p **int32
+}
+
+func (i *int32PtrValue) Set(s string) error {
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return err
+	}
+	*i.p = new(int32)
+	**i.p = int32(v)
+	return nil
+}
+
+func (i *int32PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatInt(int64(**i.p), 10)
+}
+
+func (i *int32PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *int32PtrValue) Type() string {
+	return "int"
+}
+
+type uintPtrValue struct {
+	p **uint
+}
+
+func (i *uintPtrValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i.p = new(uint)
+	**i.p = uint(v)
+	return nil
+}
+
+func (i *uintPtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(**i.p), 10)
+}
+
+func (i *uintPtrValue) IsBool() bool {
+	return false
+}
+
+func (i *uintPtrValue) Type() string {
+	return "uint"
+}
+
+type uint8PtrValue struct {
+	p **uint8
+}
+
+func (i *uint8PtrValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		return err
+	}
+	*i.p = new(uint8)
+	**i.p = uint8(v)
+	return nil
+}
+
+func (i *uint8PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(**i.p), 10)
+}
+
+func (i *uint8PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *uint8PtrValue) Type() string {
+	return "uint"
+}
+
+type uint16PtrValue struct {
+	p **uint16
+}
+
+func (i *uint16PtrValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		return err
+	}
+	*i.p = new(uint16)
+	**i.p = uint16(v)
+	return nil
+}
+
+func (i *uint16PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(**i.p), 10)
+}
+
+func (i *uint16PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *uint16PtrValue) Type() string {
+	return "uint"
+}
+
+type uint32PtrValue struct {
+	p **uint32
+}
+
+func (i *uint32PtrValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return err
+	}
+	*i.p = new(uint32)
+	**i.p = uint32(v)
+	return nil
+}
+
+func (i *uint32PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatUint(uint64(**i.p), 10)
+}
+
+func (i *uint32PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *uint32PtrValue) Type() string {
+	return "uint"
+}
+
+type uint64PtrValue struct {
+	p **uint64
+}
+
+func (i *uint64PtrValue) Set(s string) error {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return err
+	}
+	*i.p = new(uint64)
+	**i.p = v
+	return nil
+}
+
+func (i *uint64PtrValue) String() string {
+	if *i.p == nil {
+		return ""
+	}
+	return strconv.FormatUint(**i.p, 10)
+}
+
+func (i *uint64PtrValue) IsBool() bool {
+	return false
+}
+
+func (i *uint64PtrValue) Type() string {
+	return "uint"
+}
+
 type durationPtrValue struct {
 	p **time.Duration
 }
@@ -439,6 +907,141 @@ func (f *FlagSet) IntVar(p *int, name string, short rune, value int, usage strin
 func (f *FlagSet) Int(name string, short rune, value int, usage string) *int {
 	p := new(int)
 	f.IntVar(p, name, short, value, usage)
+	return p
+}
+
+// Int64Var defines an int64 flag with the specified name, short form, default value, and usage string.
+// The argument p points to an int64 variable in which to store the value of the flag.
+func (f *FlagSet) Int64Var(p *int64, name string, short rune, value int64, usage string) {
+	*p = value
+	f.Var((*int64Value)(p), name, short, usage)
+}
+
+// Int64 defines an int64 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of an int64 variable that stores the value of the flag.
+func (f *FlagSet) Int64(name string, short rune, value int64, usage string) *int64 {
+	p := new(int64)
+	f.Int64Var(p, name, short, value, usage)
+	return p
+}
+
+// Int8Var defines an int8 flag with the specified name, short form, default value, and usage string.
+// The argument p points to an int8 variable in which to store the value of the flag.
+func (f *FlagSet) Int8Var(p *int8, name string, short rune, value int8, usage string) {
+	*p = value
+	f.Var((*int8Value)(p), name, short, usage)
+}
+
+// Int8 defines an int8 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of an int8 variable that stores the value of the flag.
+func (f *FlagSet) Int8(name string, short rune, value int8, usage string) *int8 {
+	p := new(int8)
+	f.Int8Var(p, name, short, value, usage)
+	return p
+}
+
+// Int16Var defines an int16 flag with the specified name, short form, default value, and usage string.
+// The argument p points to an int16 variable in which to store the value of the flag.
+func (f *FlagSet) Int16Var(p *int16, name string, short rune, value int16, usage string) {
+	*p = value
+	f.Var((*int16Value)(p), name, short, usage)
+}
+
+// Int16 defines an int16 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of an int16 variable that stores the value of the flag.
+func (f *FlagSet) Int16(name string, short rune, value int16, usage string) *int16 {
+	p := new(int16)
+	f.Int16Var(p, name, short, value, usage)
+	return p
+}
+
+// Int32Var defines an int32 flag with the specified name, short form, default value, and usage string.
+// The argument p points to an int32 variable in which to store the value of the flag.
+func (f *FlagSet) Int32Var(p *int32, name string, short rune, value int32, usage string) {
+	*p = value
+	f.Var((*int32Value)(p), name, short, usage)
+}
+
+// Int32 defines an int32 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of an int32 variable that stores the value of the flag.
+func (f *FlagSet) Int32(name string, short rune, value int32, usage string) *int32 {
+	p := new(int32)
+	f.Int32Var(p, name, short, value, usage)
+	return p
+}
+
+// UintVar defines a uint flag with the specified name, short form, default value, and usage string.
+// The argument p points to a uint variable in which to store the value of the flag.
+func (f *FlagSet) UintVar(p *uint, name string, short rune, value uint, usage string) {
+	*p = value
+	f.Var((*uintValue)(p), name, short, usage)
+}
+
+// Uint defines a uint flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a uint variable that stores the value of the flag.
+func (f *FlagSet) Uint(name string, short rune, value uint, usage string) *uint {
+	p := new(uint)
+	f.UintVar(p, name, short, value, usage)
+	return p
+}
+
+// Uint8Var defines a uint8 flag with the specified name, short form, default value, and usage string.
+// The argument p points to a uint8 variable in which to store the value of the flag.
+func (f *FlagSet) Uint8Var(p *uint8, name string, short rune, value uint8, usage string) {
+	*p = value
+	f.Var((*uint8Value)(p), name, short, usage)
+}
+
+// Uint8 defines a uint8 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a uint8 variable that stores the value of the flag.
+func (f *FlagSet) Uint8(name string, short rune, value uint8, usage string) *uint8 {
+	p := new(uint8)
+	f.Uint8Var(p, name, short, value, usage)
+	return p
+}
+
+// Uint16Var defines a uint16 flag with the specified name, short form, default value, and usage string.
+// The argument p points to a uint16 variable in which to store the value of the flag.
+func (f *FlagSet) Uint16Var(p *uint16, name string, short rune, value uint16, usage string) {
+	*p = value
+	f.Var((*uint16Value)(p), name, short, usage)
+}
+
+// Uint16 defines a uint16 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a uint16 variable that stores the value of the flag.
+func (f *FlagSet) Uint16(name string, short rune, value uint16, usage string) *uint16 {
+	p := new(uint16)
+	f.Uint16Var(p, name, short, value, usage)
+	return p
+}
+
+// Uint32Var defines a uint32 flag with the specified name, short form, default value, and usage string.
+// The argument p points to a uint32 variable in which to store the value of the flag.
+func (f *FlagSet) Uint32Var(p *uint32, name string, short rune, value uint32, usage string) {
+	*p = value
+	f.Var((*uint32Value)(p), name, short, usage)
+}
+
+// Uint32 defines a uint32 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a uint32 variable that stores the value of the flag.
+func (f *FlagSet) Uint32(name string, short rune, value uint32, usage string) *uint32 {
+	p := new(uint32)
+	f.Uint32Var(p, name, short, value, usage)
+	return p
+}
+
+// Uint64Var defines a uint64 flag with the specified name, short form, default value, and usage string.
+// The argument p points to a uint64 variable in which to store the value of the flag.
+func (f *FlagSet) Uint64Var(p *uint64, name string, short rune, value uint64, usage string) {
+	*p = value
+	f.Var((*uint64Value)(p), name, short, usage)
+}
+
+// Uint64 defines a uint64 flag with the specified name, short form, default value, and usage string.
+// The return value is the address of a uint64 variable that stores the value of the flag.
+func (f *FlagSet) Uint64(name string, short rune, value uint64, usage string) *uint64 {
+	p := new(uint64)
+	f.Uint64Var(p, name, short, value, usage)
 	return p
 }
 
@@ -1168,7 +1771,76 @@ func (f *FlagSet) FromStruct(v any) error {
 					defVal, _ = time.ParseDuration(defaultValue)
 				}
 				f.DurationVar(fieldValue.Addr().Interface().(*time.Duration), longName, short, defVal, usage)
+			} else {
+				var defVal int64
+				if defaultValue != "" {
+					defVal, _ = strconv.ParseInt(defaultValue, 10, 64)
+				}
+				f.Int64Var(fieldValue.Addr().Interface().(*int64), longName, short, defVal, usage)
 			}
+
+		case reflect.Int8:
+			var defVal int8
+			if defaultValue != "" {
+				v, _ := strconv.ParseInt(defaultValue, 10, 8)
+				defVal = int8(v)
+			}
+			f.Int8Var(fieldValue.Addr().Interface().(*int8), longName, short, defVal, usage)
+
+		case reflect.Int16:
+			var defVal int16
+			if defaultValue != "" {
+				v, _ := strconv.ParseInt(defaultValue, 10, 16)
+				defVal = int16(v)
+			}
+			f.Int16Var(fieldValue.Addr().Interface().(*int16), longName, short, defVal, usage)
+
+		case reflect.Int32:
+			var defVal int32
+			if defaultValue != "" {
+				v, _ := strconv.ParseInt(defaultValue, 10, 32)
+				defVal = int32(v)
+			}
+			f.Int32Var(fieldValue.Addr().Interface().(*int32), longName, short, defVal, usage)
+
+		case reflect.Uint:
+			var defVal uint
+			if defaultValue != "" {
+				v, _ := strconv.ParseUint(defaultValue, 10, 64)
+				defVal = uint(v)
+			}
+			f.UintVar(fieldValue.Addr().Interface().(*uint), longName, short, defVal, usage)
+
+		case reflect.Uint8:
+			var defVal uint8
+			if defaultValue != "" {
+				v, _ := strconv.ParseUint(defaultValue, 10, 8)
+				defVal = uint8(v)
+			}
+			f.Uint8Var(fieldValue.Addr().Interface().(*uint8), longName, short, defVal, usage)
+
+		case reflect.Uint16:
+			var defVal uint16
+			if defaultValue != "" {
+				v, _ := strconv.ParseUint(defaultValue, 10, 16)
+				defVal = uint16(v)
+			}
+			f.Uint16Var(fieldValue.Addr().Interface().(*uint16), longName, short, defVal, usage)
+
+		case reflect.Uint32:
+			var defVal uint32
+			if defaultValue != "" {
+				v, _ := strconv.ParseUint(defaultValue, 10, 32)
+				defVal = uint32(v)
+			}
+			f.Uint32Var(fieldValue.Addr().Interface().(*uint32), longName, short, defVal, usage)
+
+		case reflect.Uint64:
+			var defVal uint64
+			if defaultValue != "" {
+				defVal, _ = strconv.ParseUint(defaultValue, 10, 64)
+			}
+			f.Uint64Var(fieldValue.Addr().Interface().(*uint64), longName, short, defVal, usage)
 
 		case reflect.Ptr:
 			// Handle pointer types - allows distinguishing "not set" from "zero value"
@@ -1188,7 +1860,34 @@ func (f *FlagSet) FromStruct(v any) error {
 				if field.Type.Elem() == reflect.TypeOf(time.Duration(0)) {
 					p := fieldValue.Addr().Interface().(**time.Duration)
 					f.Var(&durationPtrValue{p: p}, longName, short, usage)
+				} else {
+					p := fieldValue.Addr().Interface().(**int64)
+					f.Var(&int64PtrValue{p: p}, longName, short, usage)
 				}
+			case reflect.Int8:
+				p := fieldValue.Addr().Interface().(**int8)
+				f.Var(&int8PtrValue{p: p}, longName, short, usage)
+			case reflect.Int16:
+				p := fieldValue.Addr().Interface().(**int16)
+				f.Var(&int16PtrValue{p: p}, longName, short, usage)
+			case reflect.Int32:
+				p := fieldValue.Addr().Interface().(**int32)
+				f.Var(&int32PtrValue{p: p}, longName, short, usage)
+			case reflect.Uint:
+				p := fieldValue.Addr().Interface().(**uint)
+				f.Var(&uintPtrValue{p: p}, longName, short, usage)
+			case reflect.Uint8:
+				p := fieldValue.Addr().Interface().(**uint8)
+				f.Var(&uint8PtrValue{p: p}, longName, short, usage)
+			case reflect.Uint16:
+				p := fieldValue.Addr().Interface().(**uint16)
+				f.Var(&uint16PtrValue{p: p}, longName, short, usage)
+			case reflect.Uint32:
+				p := fieldValue.Addr().Interface().(**uint32)
+				f.Var(&uint32PtrValue{p: p}, longName, short, usage)
+			case reflect.Uint64:
+				p := fieldValue.Addr().Interface().(**uint64)
+				f.Var(&uint64PtrValue{p: p}, longName, short, usage)
 			}
 		}
 	}
