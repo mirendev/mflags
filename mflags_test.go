@@ -637,6 +637,136 @@ func TestFromStructAdvancedDefaults(t *testing.T) {
 	assert.Equal(t, "info", config.LogLevel)
 }
 
+type Int64Config struct {
+	Size     int64  `long:"size" short:"s" default:"1000" usage:"Size in bytes"`
+	Offset   int64  `long:"offset" short:"o" usage:"Offset position"`
+	OptSize  *int64 `long:"opt-size" short:"O" usage:"Optional size"`
+}
+
+func TestFromStructInt64(t *testing.T) {
+	config := &Int64Config{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--size", "9223372036854775807", "--offset", "12345"})
+	assert.NoError(t, err)
+
+	assert.Equal(t, int64(9223372036854775807), config.Size)
+	assert.Equal(t, int64(12345), config.Offset)
+	assert.Nil(t, config.OptSize)
+}
+
+func TestFromStructInt64Defaults(t *testing.T) {
+	config := &Int64Config{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{})
+	assert.NoError(t, err)
+
+	assert.Equal(t, int64(1000), config.Size)
+	assert.Equal(t, int64(0), config.Offset)
+	assert.Nil(t, config.OptSize)
+}
+
+func TestFromStructInt64Pointer(t *testing.T) {
+	config := &Int64Config{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--opt-size", "42"})
+	assert.NoError(t, err)
+
+	assert.NotNil(t, config.OptSize)
+	assert.Equal(t, int64(42), *config.OptSize)
+}
+
+type AllIntTypesConfig struct {
+	Int8Val    int8    `long:"int8" default:"10" usage:"int8 value"`
+	Int16Val   int16   `long:"int16" default:"1000" usage:"int16 value"`
+	Int32Val   int32   `long:"int32" default:"100000" usage:"int32 value"`
+	UintVal    uint    `long:"uint" default:"50" usage:"uint value"`
+	Uint8Val   uint8   `long:"uint8" default:"200" usage:"uint8 value"`
+	Uint16Val  uint16  `long:"uint16" default:"60000" usage:"uint16 value"`
+	Uint32Val  uint32  `long:"uint32" default:"4000000000" usage:"uint32 value"`
+	Uint64Val  uint64  `long:"uint64" default:"10000000000" usage:"uint64 value"`
+	OptInt8    *int8   `long:"opt-int8" usage:"optional int8"`
+	OptUint64  *uint64 `long:"opt-uint64" usage:"optional uint64"`
+}
+
+func TestFromStructAllIntTypes(t *testing.T) {
+	config := &AllIntTypesConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{
+		"--int8", "127",
+		"--int16", "32767",
+		"--int32", "2147483647",
+		"--uint", "100",
+		"--uint8", "255",
+		"--uint16", "65535",
+		"--uint32", "4294967295",
+		"--uint64", "18446744073709551615",
+	})
+	assert.NoError(t, err)
+
+	assert.Equal(t, int8(127), config.Int8Val)
+	assert.Equal(t, int16(32767), config.Int16Val)
+	assert.Equal(t, int32(2147483647), config.Int32Val)
+	assert.Equal(t, uint(100), config.UintVal)
+	assert.Equal(t, uint8(255), config.Uint8Val)
+	assert.Equal(t, uint16(65535), config.Uint16Val)
+	assert.Equal(t, uint32(4294967295), config.Uint32Val)
+	assert.Equal(t, uint64(18446744073709551615), config.Uint64Val)
+	assert.Nil(t, config.OptInt8)
+	assert.Nil(t, config.OptUint64)
+}
+
+func TestFromStructAllIntTypesDefaults(t *testing.T) {
+	config := &AllIntTypesConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{})
+	assert.NoError(t, err)
+
+	assert.Equal(t, int8(10), config.Int8Val)
+	assert.Equal(t, int16(1000), config.Int16Val)
+	assert.Equal(t, int32(100000), config.Int32Val)
+	assert.Equal(t, uint(50), config.UintVal)
+	assert.Equal(t, uint8(200), config.Uint8Val)
+	assert.Equal(t, uint16(60000), config.Uint16Val)
+	assert.Equal(t, uint32(4000000000), config.Uint32Val)
+	assert.Equal(t, uint64(10000000000), config.Uint64Val)
+}
+
+func TestFromStructIntPointerTypes(t *testing.T) {
+	config := &AllIntTypesConfig{}
+	fs := NewFlagSet("test")
+
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	err = fs.Parse([]string{"--opt-int8", "-128", "--opt-uint64", "999"})
+	assert.NoError(t, err)
+
+	assert.NotNil(t, config.OptInt8)
+	assert.Equal(t, int8(-128), *config.OptInt8)
+	assert.NotNil(t, config.OptUint64)
+	assert.Equal(t, uint64(999), *config.OptUint64)
+}
+
 type NoTagsConfig struct {
 	Verbose bool
 	Name    string
