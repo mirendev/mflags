@@ -141,8 +141,8 @@ func TestPositionalWithRest(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "echo", *cmd)
-	// Rest includes all args, including positional ones
-	assert.Equal(t, []string{"echo", "hello", "world", "!"}, args)
+	// Rest includes only the args after positional ones
+	assert.Equal(t, []string{"hello", "world", "!"}, args)
 }
 
 func TestPositionalWithFlags(t *testing.T) {
@@ -239,8 +239,8 @@ func TestRestWithDoubleHyphen(t *testing.T) {
 
 	assert.Equal(t, "build", *cmd)
 	assert.True(t, *verbose)
-	// Rest includes positional arg and everything after --
-	assert.Equal(t, []string{"build", "--not-a-flag", "-x"}, rest)
+	// Rest includes only args after positional ones
+	assert.Equal(t, []string{"--not-a-flag", "-x"}, rest)
 }
 
 func TestRestEmpty(t *testing.T) {
@@ -416,8 +416,95 @@ func TestPositionalWithRestBetweenOptions(t *testing.T) {
 	assert.True(t, *optimize)
 	assert.True(t, *force)
 	assert.Equal(t, "build", *command)
-	// Rest should include all non-flag arguments
-	assert.Equal(t, []string{"build", "file1.go", "file2.go", "file3.go"}, rest)
+	// Rest should include only non-flag arguments after positional ones
+	assert.Equal(t, []string{"file1.go", "file2.go", "file3.go"}, rest)
+}
+
+func TestExtraArgumentsRejected(t *testing.T) {
+	t.Run("no positional args rejects extra args", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		// No positional args, no rest field
+
+		err := fs.Parse([]string{"extra"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+	})
+
+	t.Run("multiple extra args rejected", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		// No positional args, no rest field
+
+		err := fs.Parse([]string{"extra1", "extra2", "extra3"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra1 extra2 extra3]")
+	})
+
+	t.Run("positional args rejects extra args", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		fs.StringPos("first", 0, "", "First arg")
+		fs.StringPos("second", 1, "", "Second arg")
+
+		err := fs.Parse([]string{"a", "b", "extra"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+	})
+
+	t.Run("positional with gaps rejects extra args", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		// Positions 0, 2, 4 - PositionalCount() returns 5 (max+1)
+		fs.StringPos("first", 0, "", "First arg")
+		fs.StringPos("third", 2, "", "Third arg")
+		fs.StringPos("fifth", 4, "", "Fifth arg")
+
+		// 5 args fill all positions, 6th is extra
+		err := fs.Parse([]string{"a", "b", "c", "d", "e", "extra"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+	})
+
+	t.Run("rest field accepts all args", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var rest []string
+		fs.Rest(&rest, "Rest arguments")
+
+		err := fs.Parse([]string{"a", "b", "c"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a", "b", "c"}, rest)
+	})
+
+	t.Run("positional with rest accepts extra args", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		cmd := fs.StringPos("command", 0, "", "Command")
+		var rest []string
+		fs.Rest(&rest, "Rest arguments")
+
+		err := fs.Parse([]string{"build", "file1", "file2"})
+		require.NoError(t, err)
+		assert.Equal(t, "build", *cmd)
+		assert.Equal(t, []string{"file1", "file2"}, rest)
+	})
+
+	t.Run("exact positional count is accepted", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		first := fs.StringPos("first", 0, "", "First arg")
+		second := fs.StringPos("second", 1, "", "Second arg")
+
+		err := fs.Parse([]string{"a", "b"})
+		require.NoError(t, err)
+		assert.Equal(t, "a", *first)
+		assert.Equal(t, "b", *second)
+	})
+
+	t.Run("fewer args than positionals is accepted", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		first := fs.StringPos("first", 0, "default1", "First arg")
+		second := fs.StringPos("second", 1, "default2", "Second arg")
+
+		err := fs.Parse([]string{"a"})
+		require.NoError(t, err)
+		assert.Equal(t, "a", *first)
+		assert.Equal(t, "default2", *second)
+	})
 }
 
 func TestDoubleHyphenEndsFlags(t *testing.T) {
@@ -471,8 +558,8 @@ func TestDoubleHyphenEndsFlags(t *testing.T) {
 
 	assert.True(t, *verbose)
 	assert.Equal(t, "run", *command)
-	// Rest should include all args after --, treating them as literals
-	assert.Equal(t, []string{"run", "-f", "--test", "arg1", "arg2"}, rest)
+	// Rest should include only args after positional ones
+	assert.Equal(t, []string{"-f", "--test", "arg1", "arg2"}, rest)
 
 	// Reset for test case 4: only --
 	fs = NewFlagSet("test")

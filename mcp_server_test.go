@@ -184,6 +184,8 @@ func TestMCPServerToolCall(t *testing.T) {
 
 	fs := NewFlagSet("echo")
 	fs.String("prefix", 'p', "", "prefix for output")
+	var restArgs []string
+	fs.Rest(&restArgs, "words to echo")
 
 	var capturedPrefix string
 	var capturedArgs []string
