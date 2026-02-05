@@ -89,6 +89,8 @@ func TestMixedFlagsAndArgs(t *testing.T) {
 	fs := NewFlagSet("test")
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
 	name := fs.String("name", 'n', "default", "name to use")
+	var rest []string
+	fs.Rest(&rest, "args")
 
 	err := fs.Parse([]string{"-v", "arg1", "--name", "test", "arg2", "arg3"})
 	assert.NoError(t, err)
@@ -100,6 +102,8 @@ func TestMixedFlagsAndArgs(t *testing.T) {
 func TestFlagsAfterDoubleHyphen(t *testing.T) {
 	fs := NewFlagSet("test")
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+	var rest []string
+	fs.Rest(&rest, "args")
 
 	err := fs.Parse([]string{"-v", "--", "-v", "--verbose"})
 	assert.NoError(t, err)
@@ -212,6 +216,8 @@ func TestComplexScenario(t *testing.T) {
 	quiet := fs.Bool("quiet", 'q', false, "quiet mode")
 	output := fs.String("output", 'o', "stdout", "output file")
 	level := fs.Int("level", 'l', 1, "level")
+	var rest []string
+	fs.Rest(&rest, "files")
 
 	args := []string{
 		"cmd",
@@ -265,6 +271,8 @@ func TestShortFlagWithImmediateValue(t *testing.T) {
 func TestOnlyDoubleHyphen(t *testing.T) {
 	fs := NewFlagSet("test")
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+	var rest []string
+	fs.Rest(&rest, "args")
 
 	err := fs.Parse([]string{"--", "arg1", "arg2"})
 	assert.NoError(t, err)
@@ -392,6 +400,8 @@ func TestStringArrayMixedWithOtherFlags(t *testing.T) {
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
 	tags := fs.StringArray("tags", 't', nil, "tags to apply")
 	name := fs.String("name", 'n', "default", "name to use")
+	var rest []string
+	fs.Rest(&rest, "args")
 
 	err := fs.Parse([]string{"-v", "--tags", "a,b,c", "--name", "test", "arg1"})
 	assert.NoError(t, err)
@@ -521,6 +531,8 @@ func TestDurationMixedWithOtherFlags(t *testing.T) {
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
 	timeout := fs.Duration("timeout", 't', 0, "timeout duration")
 	retries := fs.Int("retries", 'r', 3, "number of retries")
+	var rest []string
+	fs.Rest(&rest, "args")
 
 	err := fs.Parse([]string{"-v", "--timeout", "30s", "-r", "5", "arg1"})
 	assert.NoError(t, err)
@@ -850,6 +862,7 @@ type CombinedUsageConfig struct {
 	Verbose bool          `long:"verbose" short:"v"`
 	Files   []string      `long:"files" short:"f"`
 	Timeout time.Duration `long:"timeout" short:"t" default:"1m"`
+	Rest    []string      `rest:"true"`
 }
 
 func TestFromStructWithArgs(t *testing.T) {
@@ -981,12 +994,13 @@ func TestInvalidRestFieldType(t *testing.T) {
 	err := fs.FromStruct(config)
 	assert.NoError(t, err) // Should not error, just ignore the invalid rest field
 
+	// Since the rest field is invalid and ignored, extra args should be rejected
 	err = fs.Parse([]string{"arg1", "arg2"})
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected arguments")
 
 	// The rest field should be ignored since it's not []string
 	assert.Equal(t, "", config.RestField)
-	assert.Equal(t, []string{"arg1", "arg2"}, fs.Args())
 }
 
 // Tests for position tag
@@ -1086,8 +1100,8 @@ func TestPositionWithRest(t *testing.T) {
 
 	assert.Equal(t, "compile", config.Command)
 	assert.Equal(t, "out.bin", config.Output)
-	// Rest should include all non-flag args including the one at position 0
-	assert.Equal(t, []string{"compile", "file1.go", "file2.go", "file3.go"}, config.Files)
+	// Rest should include only non-flag args after positional ones
+	assert.Equal(t, []string{"file1.go", "file2.go", "file3.go"}, config.Files)
 }
 
 type ConfigWithTypes struct {
@@ -1153,13 +1167,14 @@ func TestPositionAfterDoubleHyphen(t *testing.T) {
 	err := fs.FromStruct(config)
 	assert.NoError(t, err)
 
-	err = fs.Parse([]string{"--", "cmd", "target", "3", "--verbose"})
+	// With 3 positional args defined (0, 1, 2), any extra args are rejected
+	err = fs.Parse([]string{"--", "cmd", "target", "3"})
 	assert.NoError(t, err)
 
 	assert.Equal(t, "cmd", config.Command)
 	assert.Equal(t, "target", config.Target)
 	assert.Equal(t, 3, config.Count)
-	assert.False(t, config.Verbose) // --verbose is after --, so not parsed as flag
+	assert.False(t, config.Verbose) // Verbose flag not set since no flags parsed
 }
 
 type ConfigInvalidPosition struct {
@@ -1173,8 +1188,11 @@ func TestInvalidPositionTag(t *testing.T) {
 	err := fs.FromStruct(config)
 	assert.NoError(t, err) // Should not error, just ignore invalid position
 
+	// Since the position tag is invalid, no positional args are defined,
+	// so any args should be rejected
 	err = fs.Parse([]string{"value"})
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected arguments")
 
 	assert.Equal(t, "", config.Item) // Field is ignored due to invalid position
 }
@@ -1190,8 +1208,11 @@ func TestNegativePositionTag(t *testing.T) {
 	err := fs.FromStruct(config)
 	assert.NoError(t, err) // Should not error, just ignore negative position
 
+	// Since the position tag is invalid (negative), no positional args are defined,
+	// so any args should be rejected
 	err = fs.Parse([]string{"value"})
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected arguments")
 
 	assert.Equal(t, "", config.Item) // Field is ignored due to negative position
 }
@@ -1699,6 +1720,8 @@ func TestAutomaticHelpFlag(t *testing.T) {
 	t.Run("help after --", func(t *testing.T) {
 		fs := NewFlagSet("myapp")
 		fs.String("output", 'o', "a.out", "output file")
+		var rest []string
+		fs.Rest(&rest, "args")
 
 		err := fs.Parse([]string{"--", "-h", "--help"})
 
@@ -1709,6 +1732,8 @@ func TestAutomaticHelpFlag(t *testing.T) {
 	// Test specifically that -- stops help detection
 	t.Run("-- stops help detection", func(t *testing.T) {
 		fs := NewFlagSet("myapp")
+		var rest []string
+		fs.Rest(&rest, "args")
 
 		// Capture stdout to ensure help is NOT shown
 		old := os.Stdout

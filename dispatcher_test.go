@@ -16,6 +16,8 @@ func TestDispatcherBasic(t *testing.T) {
 	// Register a simple command
 	fs := NewFlagSet("test")
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
+	var restArgs []string
+	fs.Rest(&restArgs, "extra arguments")
 
 	var executed bool
 	var capturedArgs []string
@@ -42,18 +44,27 @@ func TestDispatcherNestedCommands(t *testing.T) {
 	// Track which command was executed
 	var executedCommand string
 
-	// Register nested commands
-	d.Dispatch("foo", NewCommand(NewFlagSet("foo"), func(fs *FlagSet, args []string) error {
+	// Register nested commands - each with a rest field to accept extra args
+	fooFs := NewFlagSet("foo")
+	var fooRest []string
+	fooFs.Rest(&fooRest, "extra arguments")
+	d.Dispatch("foo", NewCommand(fooFs, func(fs *FlagSet, args []string) error {
 		executedCommand = "foo"
 		return nil
 	}))
 
-	d.Dispatch("foo bar", NewCommand(NewFlagSet("foo bar"), func(fs *FlagSet, args []string) error {
+	fooBarFs := NewFlagSet("foo bar")
+	var fooBarRest []string
+	fooBarFs.Rest(&fooBarRest, "extra arguments")
+	d.Dispatch("foo bar", NewCommand(fooBarFs, func(fs *FlagSet, args []string) error {
 		executedCommand = "foo bar"
 		return nil
 	}))
 
-	d.Dispatch("foo bar baz", NewCommand(NewFlagSet("foo bar baz"), func(fs *FlagSet, args []string) error {
+	fooBarBazFs := NewFlagSet("foo bar baz")
+	var fooBarBazRest []string
+	fooBarBazFs.Rest(&fooBarBazRest, "extra arguments")
+	d.Dispatch("foo bar baz", NewCommand(fooBarBazFs, func(fs *FlagSet, args []string) error {
 		executedCommand = "foo bar baz"
 		return nil
 	}))
@@ -82,6 +93,8 @@ func TestDispatcherWithFlags(t *testing.T) {
 	output := fs.String("output", 'o', "a.out", "output file")
 	optimize := fs.Bool("optimize", 'O', false, "enable optimization")
 	jobs := fs.Int("jobs", 'j', 1, "number of parallel jobs")
+	var restArgs []string
+	fs.Rest(&restArgs, "source files")
 
 	var capturedFlags struct {
 		output   string
@@ -502,8 +515,12 @@ func TestDispatcherWithStructFlags(t *testing.T) {
 func TestDispatcherMultiWordCommandWithArgs(t *testing.T) {
 	d := NewDispatcher("myapp")
 
+	testFs := NewFlagSet("test")
+	var restArgs []string
+	testFs.Rest(&restArgs, "extra arguments")
+
 	var capturedArgs []string
-	d.Dispatch("foo bar baz", NewCommand(NewFlagSet("test"), func(fs *FlagSet, args []string) error {
+	d.Dispatch("foo bar baz", NewCommand(testFs, func(fs *FlagSet, args []string) error {
 		capturedArgs = args
 		return nil
 	}))
@@ -784,10 +801,12 @@ func TestDispatcherHelpWithInterspersedFlags(t *testing.T) {
 func TestDispatcherFlagsAfterPositionalArgs(t *testing.T) {
 	d := NewDispatcher("myapp")
 
-	// Create command "foo bar" with flags and positional arguments
+	// Create command "foo bar" with flags and a rest field for extra arguments
 	fs := NewFlagSet("foo bar")
 	verbose := fs.Bool("verbose", 'v', false, "verbose output")
 	output := fs.String("output", 'o', "default.txt", "output file")
+	var restArgs []string
+	fs.Rest(&restArgs, "files to process")
 
 	var capturedArgs []string
 	var executed bool
@@ -992,6 +1011,8 @@ func TestDispatcherHelpAfterDoubleHyphen(t *testing.T) {
 
 	fs := NewFlagSet("process")
 	fs.Bool("verbose", 'v', false, "verbose output")
+	var restArgs []string
+	fs.Rest(&restArgs, "files to process")
 
 	var executed bool
 	var capturedArgs []string
@@ -1146,6 +1167,93 @@ func TestDispatcherHelpWithAllowUnknownFlags(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Contains(t, buf.String(), "Usage:")
+	})
+}
+
+func TestDispatcherRejectsExtraArgs(t *testing.T) {
+	t.Run("command with no positional args rejects extra", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("app")
+		fs.Bool("verbose", 'v', false, "verbose output")
+
+		d.Dispatch("app", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Application command")))
+
+		err := d.Execute([]string{"app", "services"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [services]")
+	})
+
+	t.Run("nested command with no positional args rejects extra", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("app services")
+		fs.Bool("verbose", 'v', false, "verbose output")
+
+		d.Dispatch("app services", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("List services")))
+
+		err := d.Execute([]string{"app", "services", "extra"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+	})
+
+	t.Run("command with positional args accepts correct count", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("deploy")
+		fs.StringPos("environment", 0, "", "Target environment")
+
+		var executed bool
+		d.Dispatch("deploy", NewCommand(fs,
+			func(flags *FlagSet, args []string) error {
+				executed = true
+				return nil
+			},
+			WithUsage("Deploy to environment")))
+
+		err := d.Execute([]string{"deploy", "production"})
+		assert.NoError(t, err)
+		assert.True(t, executed)
+	})
+
+	t.Run("command with positional args rejects extra", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		fs := NewFlagSet("deploy")
+		fs.StringPos("environment", 0, "", "Target environment")
+
+		d.Dispatch("deploy", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Deploy to environment")))
+
+		err := d.Execute([]string{"deploy", "production", "extra"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+	})
+
+	t.Run("command with rest field accepts all args", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		type Config struct {
+			Verbose bool     `long:"verbose" short:"v"`
+			Files   []string `rest:"true"`
+		}
+
+		config := &Config{}
+		fs := NewFlagSet("process")
+		fs.FromStruct(config)
+
+		d.Dispatch("process", NewCommand(fs,
+			func(flags *FlagSet, args []string) error { return nil },
+			WithUsage("Process files")))
+
+		err := d.Execute([]string{"process", "file1", "file2", "file3"})
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"file1", "file2", "file3"}, config.Files)
 	})
 }
 
