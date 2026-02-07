@@ -965,6 +965,278 @@ func TestDispatcherSubCommandHelp(t *testing.T) {
 	assert.NotContains(t, output, "remote add")
 }
 
+func TestDispatcherNamespaceDiscovery(t *testing.T) {
+	t.Run("top-level help shows namespace from subcommand-only registration", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		// Register a top-level command and a subcommand without its parent
+		d.Dispatch("build", NewCommand(NewFlagSet("build"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Build the project")))
+
+		d.Dispatch("config get", NewCommand(NewFlagSet("config get"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Get a config value")))
+
+		d.Dispatch("config set", NewCommand(NewFlagSet("config set"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Set a config value")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Available commands:")
+		assert.Contains(t, output, "build")
+		assert.Contains(t, output, "config")
+		// Should NOT show the full subcommand paths at the top level
+		assert.NotContains(t, output, "config get")
+		assert.NotContains(t, output, "config set")
+	})
+
+	t.Run("typing a namespace shows its subcommands", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		d.Dispatch("config get", NewCommand(NewFlagSet("config get"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Get a config value")))
+
+		d.Dispatch("config set", NewCommand(NewFlagSet("config set"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Set a config value")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"config"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp config <command>")
+		assert.Contains(t, output, "Available commands:")
+		assert.Contains(t, output, "get")
+		assert.Contains(t, output, "Get a config value")
+		assert.Contains(t, output, "set")
+		assert.Contains(t, output, "Set a config value")
+	})
+
+	t.Run("namespace --help shows subcommands", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		d.Dispatch("config get", NewCommand(NewFlagSet("config get"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Get a config value")))
+
+		// Capture stdout
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"config", "--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp config <command>")
+		assert.Contains(t, output, "get")
+	})
+
+	t.Run("deep namespace surfaces intermediate namespaces", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		d.Dispatch("cloud compute instances list", NewCommand(NewFlagSet("list"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("List compute instances")))
+
+		d.Dispatch("cloud storage buckets list", NewCommand(NewFlagSet("list"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("List storage buckets")))
+
+		// Top-level help should show "cloud"
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "cloud")
+		assert.NotContains(t, output, "compute")
+
+		// "cloud" namespace should show "compute" and "storage"
+		r, w, _ = os.Pipe()
+		os.Stdout = w
+
+		err = d.Execute([]string{"cloud"})
+
+		w.Close()
+		os.Stdout = old
+
+		buf.Reset()
+		io.Copy(&buf, r)
+		output = buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "compute")
+		assert.Contains(t, output, "storage")
+
+		// "cloud compute" namespace should show "instances"
+		r, w, _ = os.Pipe()
+		os.Stdout = w
+
+		err = d.Execute([]string{"cloud", "compute"})
+
+		w.Close()
+		os.Stdout = old
+
+		buf.Reset()
+		io.Copy(&buf, r)
+		output = buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "instances")
+	})
+
+	t.Run("typing namespace under registered parent shows namespace help", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		// Register "debug" as a command
+		debugFs := NewFlagSet("debug")
+		d.Dispatch("debug", NewCommand(debugFs,
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Debug commands")))
+
+		// Register subcommands under "debug entity" without registering "debug entity" itself
+		d.Dispatch("debug entity list", NewCommand(NewFlagSet("list"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("List entities")))
+
+		d.Dispatch("debug entity show", NewCommand(NewFlagSet("show"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Show entity details")))
+
+		// "debug entity" should show namespace help, not "unexpected arguments"
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"debug", "entity"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp debug entity <command>")
+		assert.Contains(t, output, "list")
+		assert.Contains(t, output, "List entities")
+		assert.Contains(t, output, "show")
+		assert.Contains(t, output, "Show entity details")
+	})
+
+	t.Run("typing namespace with -h under registered parent shows namespace help", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		debugFs := NewFlagSet("debug")
+		d.Dispatch("debug", NewCommand(debugFs,
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Debug commands")))
+
+		d.Dispatch("debug entity list", NewCommand(NewFlagSet("list"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("List entities")))
+
+		// "debug entity -h" should show namespace help for entity, not debug's help
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"debug", "entity", "-h"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Usage: myapp debug entity <command>")
+		assert.Contains(t, output, "list")
+	})
+
+	t.Run("registered parent with subcommand-only deeper children shows namespace in sub-commands", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+
+		// Register "git" as a command
+		d.Dispatch("git", NewCommand(NewFlagSet("git"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Git version control")))
+
+		// Register "git remote add" without "git remote"
+		d.Dispatch("git remote add", NewCommand(NewFlagSet("add"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Add a new remote")))
+
+		d.Dispatch("git clone", NewCommand(NewFlagSet("clone"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Clone a repository")))
+
+		// "git --help" should show "remote" as a sub-command
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := d.Execute([]string{"git", "--help"})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		output := buf.String()
+
+		assert.NoError(t, err)
+		assert.Contains(t, output, "Sub-commands:")
+		assert.Contains(t, output, "clone")
+		assert.Contains(t, output, "remote")
+	})
+}
+
 // TestDispatcherHelpShowsTypes tests that help output shows specific types for flags
 func TestDispatcherHelpShowsTypes(t *testing.T) {
 	d := NewDispatcher("myapp")
