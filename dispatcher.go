@@ -178,11 +178,55 @@ func (d *Dispatcher) Execute(args []string) error {
 	}
 
 	if entry == nil {
-		// No command found, check for help flags
+		// No command found — check if the args form a namespace prefix
+		var nonFlagArgs []string
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			if !strings.HasPrefix(arg, "-") && arg != "help" {
+				nonFlagArgs = append(nonFlagArgs, arg)
+			}
+		}
+
+		if len(nonFlagArgs) > 0 {
+			namespacePath := normalizeCommandPath(strings.Join(nonFlagArgs, " "))
+			if d.isNamespace(namespacePath) {
+				return d.showNamespaceHelp(namespacePath)
+			}
+		}
+
 		if hasHelp {
 			return d.showHelp()
 		}
 		return fmt.Errorf("unknown command: %s", strings.Join(args, " "))
+	}
+
+	// Check if remaining non-flag args form a namespace under the matched command.
+	// For example, if "debug" matched but the user typed "debug entity" and
+	// "debug entity" is a namespace (has subcommands), show namespace help.
+	var remainingNonFlags []string
+	for _, arg := range allArgs {
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") && arg != "help" {
+			remainingNonFlags = append(remainingNonFlags, arg)
+		}
+	}
+
+	if len(remainingNonFlags) > 0 {
+		// Try progressively longer namespace paths from the remaining args
+		for i := len(remainingNonFlags); i > 0; i-- {
+			namespacePath := entry.Path + " " + strings.Join(remainingNonFlags[:i], " ")
+			if d.isNamespace(namespacePath) {
+				// Check if this namespace also has a registered command
+				if cmdEntry, ok := d.commands[namespacePath]; ok {
+					return d.showCommandHelp(cmdEntry)
+				}
+				return d.showNamespaceHelp(namespacePath)
+			}
+		}
 	}
 
 	// If help is requested, show command-specific help
@@ -389,34 +433,22 @@ func (d *Dispatcher) showHelp() error {
 	fmt.Printf("Usage: %s <command> [arguments]\n\n", d.name)
 	fmt.Println("Available commands:")
 
-	// Collect and sort command paths
-	var paths []string
-	maxLen := 0
-	for path := range d.commands {
-		paths = append(paths, path)
-		if len(path) > maxLen {
-			maxLen = len(path)
-		}
-	}
+	children := d.getDirectChildren("")
 
-	// Sort paths for consistent output
-	sortedPaths := make([]string, len(paths))
-	copy(sortedPaths, paths)
-	for i := 0; i < len(sortedPaths); i++ {
-		for j := i + 1; j < len(sortedPaths); j++ {
-			if sortedPaths[i] > sortedPaths[j] {
-				sortedPaths[i], sortedPaths[j] = sortedPaths[j], sortedPaths[i]
-			}
+	// Find max length for alignment
+	maxLen := 0
+	for _, child := range children {
+		if len(child.Name) > maxLen {
+			maxLen = len(child.Name)
 		}
 	}
 
 	// Print commands with usage
-	for _, path := range sortedPaths {
-		entry := d.commands[path]
-		if entry.Usage != "" {
-			fmt.Printf("  %-*s  %s\n", maxLen+2, path, entry.Usage)
+	for _, child := range children {
+		if child.Usage != "" {
+			fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
 		} else {
-			fmt.Printf("  %s\n", path)
+			fmt.Printf("  %s\n", child.Name)
 		}
 	}
 
@@ -521,29 +553,25 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 		})
 	}
 
-	// Show sub-commands if any exist
-	subCommands := d.getSubCommands(entry.Path)
-	if len(subCommands) > 0 {
+	// Show sub-commands if any exist (including implicit namespaces)
+	children := d.getDirectChildren(entry.Path)
+	if len(children) > 0 {
 		fmt.Println("\nSub-commands:")
 
 		// Find the maximum length for alignment
 		maxLen := 0
-		for _, subCmd := range subCommands {
-			// Display the sub-command name without the parent prefix
-			subCmdName := strings.TrimPrefix(subCmd.Path, entry.Path+" ")
-			if len(subCmdName) > maxLen {
-				maxLen = len(subCmdName)
+		for _, child := range children {
+			if len(child.Name) > maxLen {
+				maxLen = len(child.Name)
 			}
 		}
 
 		// Print sub-commands with usage
-		for _, subCmd := range subCommands {
-			// Display the sub-command name without the parent prefix
-			subCmdName := strings.TrimPrefix(subCmd.Path, entry.Path+" ")
-			if subCmd.Usage != "" {
-				fmt.Printf("  %-*s  %s\n", maxLen+2, subCmdName, subCmd.Usage)
+		for _, child := range children {
+			if child.Usage != "" {
+				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
 			} else {
-				fmt.Printf("  %s\n", subCmdName)
+				fmt.Printf("  %s\n", child.Name)
 			}
 		}
 	}
@@ -573,6 +601,119 @@ func (d *Dispatcher) getSubCommands(parentPath string) []*CommandEntry {
 	})
 
 	return subCommands
+}
+
+// ChildEntry represents a direct child of a command path, which may be either
+// a registered command or an implicit namespace (prefix of deeper commands).
+type ChildEntry struct {
+	Name    string // The child name (single word)
+	Path    string // The full path (parentPath + " " + Name, or just Name for top-level)
+	Usage   string // Usage text (from registered command, or empty for namespaces)
+	IsEntry bool   // True if this is a registered command, false if just a namespace
+}
+
+// getDirectChildren returns the direct children of a path, including both
+// registered commands and implicit namespaces. If parentPath is empty, returns
+// top-level entries.
+func (d *Dispatcher) getDirectChildren(parentPath string) []ChildEntry {
+	children := make(map[string]*ChildEntry)
+
+	for path, entry := range d.commands {
+		var remainder string
+		if parentPath == "" {
+			remainder = path
+		} else {
+			prefix := parentPath + " "
+			if !strings.HasPrefix(path, prefix) {
+				continue
+			}
+			remainder = strings.TrimPrefix(path, prefix)
+		}
+
+		parts := strings.Fields(remainder)
+		if len(parts) == 0 {
+			continue
+		}
+
+		childName := parts[0]
+		childPath := childName
+		if parentPath != "" {
+			childPath = parentPath + " " + childName
+		}
+
+		if len(parts) == 1 {
+			// Direct child command
+			children[childName] = &ChildEntry{
+				Name:    childName,
+				Path:    childPath,
+				Usage:   entry.Usage,
+				IsEntry: true,
+			}
+		} else {
+			// Deeper command — childName is a namespace (unless already registered)
+			if _, ok := children[childName]; !ok {
+				children[childName] = &ChildEntry{
+					Name:    childName,
+					Path:    childPath,
+					Usage:   "",
+					IsEntry: false,
+				}
+			}
+		}
+	}
+
+	// Sort by name
+	var result []ChildEntry
+	for _, child := range children {
+		result = append(result, *child)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	return result
+}
+
+// isNamespace returns true if the given path is a prefix of any registered command
+// (i.e., there are commands under this path even if the path itself isn't a command).
+func (d *Dispatcher) isNamespace(path string) bool {
+	prefix := path + " "
+	for cmdPath := range d.commands {
+		if strings.HasPrefix(cmdPath, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// showNamespaceHelp displays help for an implicit namespace (a command prefix
+// that isn't itself a registered command but has subcommands under it).
+func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
+	fmt.Printf("Usage: %s %s <command> [arguments]\n", d.name, namespacePath)
+
+	children := d.getDirectChildren(namespacePath)
+
+	if len(children) > 0 {
+		fmt.Println("\nAvailable commands:")
+
+		maxLen := 0
+		for _, child := range children {
+			if len(child.Name) > maxLen {
+				maxLen = len(child.Name)
+			}
+		}
+
+		for _, child := range children {
+			if child.Usage != "" {
+				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
+			} else {
+				fmt.Printf("  %s\n", child.Name)
+			}
+		}
+	}
+
+	fmt.Printf("\nUse '%s %s <command> --help' for more information about a command.\n", d.name, namespacePath)
+	return nil
 }
 
 // GetCommand returns the command for a given path, or nil if not found
