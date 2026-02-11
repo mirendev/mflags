@@ -550,39 +550,7 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 
 	// Show flags if any are defined
 	if fs != nil {
-		hasFlags := false
-		fs.VisitAll(func(flag *Flag) {
-			if !hasFlags {
-				fmt.Println("\nOptions:")
-				hasFlags = true
-			}
-
-			// Format flag display
-			var flagStr string
-			if flag.Short != 0 && flag.Name != "" {
-				flagStr = fmt.Sprintf("  -%c, --%s", flag.Short, flag.Name)
-			} else if flag.Short != 0 {
-				flagStr = fmt.Sprintf("  -%c", flag.Short)
-			} else {
-				flagStr = fmt.Sprintf("      --%s", flag.Name)
-			}
-
-			// Add value placeholder for non-boolean flags
-			if !flag.Value.IsBool() {
-				flagStr += fmt.Sprintf(" <%s>", flag.Value.Type())
-			}
-
-			// Print flag with usage
-			if flag.Usage != "" {
-				fmt.Printf("%-30s %s", flagStr, flag.Usage)
-				if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "0" {
-					fmt.Printf(" (default: %s)", flag.DefValue)
-				}
-				fmt.Println()
-			} else {
-				fmt.Println(flagStr)
-			}
-		})
+		fs.WriteFlagHelp()
 	}
 
 	// Show sub-commands if any exist (including implicit namespaces)
