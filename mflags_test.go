@@ -3269,3 +3269,21 @@ func TestGetTagValuesMixed(t *testing.T) {
 
 	assert.Equal(t, []string{"debug", "info", "warn"}, choices)
 }
+
+func TestDuplicateLongFlagPanics(t *testing.T) {
+	fs := NewFlagSet("test")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	assert.PanicsWithValue(t, `flag "verbose" already registered as --verbose`, func() {
+		fs.Bool("verbose", 0, false, "duplicate verbose")
+	})
+}
+
+func TestDuplicateShortFlagPanics(t *testing.T) {
+	fs := NewFlagSet("test")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	assert.PanicsWithValue(t, `short flag 'v' already registered for --verbose`, func() {
+		fs.String("version", 'v', "", "show version")
+	})
+}
