@@ -6,7 +6,26 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/term"
 )
+
+var stdoutIsTerminal = sync.OnceValue(func() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+})
+
+// faint returns the string wrapped in ANSI faint styling if stdout is a TTY
+// and the NO_COLOR environment variable is not set.
+func faint(s string) string {
+	if os.Getenv("NO_COLOR") != "" {
+		return s
+	}
+	if !stdoutIsTerminal() {
+		return s
+	}
+	return "\033[2m" + s + "\033[0m"
+}
 
 // Command is an interface for executable commands
 type Command interface {
@@ -438,7 +457,7 @@ func (d *Dispatcher) showHelp() error {
 	for _, child := range children {
 		grandchildren := d.getDirectChildren(child.Path)
 		if len(grandchildren) > 0 {
-			fmt.Printf("  %s (%d sub-commands)\n", child.Name, len(grandchildren))
+			fmt.Printf("  %s %s\n", child.Name, faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren))))
 		} else {
 			fmt.Printf("  %s\n", child.Name)
 		}
@@ -563,12 +582,12 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 			grandchildren := d.getDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
-				suffix = fmt.Sprintf(" (%d sub-commands)", len(grandchildren))
+				suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
 			}
 			if child.Usage != "" {
 				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
 			} else if suffix != "" {
-				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, suffix[1:])
+				fmt.Printf("  %-*s %s\n", maxLen+2, child.Name, suffix)
 			} else {
 				fmt.Printf("  %s\n", child.Name)
 			}
@@ -706,12 +725,12 @@ func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 			grandchildren := d.getDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
-				suffix = fmt.Sprintf(" (%d sub-commands)", len(grandchildren))
+				suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
 			}
 			if child.Usage != "" {
 				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
 			} else if suffix != "" {
-				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, suffix[1:])
+				fmt.Printf("  %-*s %s\n", maxLen+2, child.Name, suffix)
 			} else {
 				fmt.Printf("  %s\n", child.Name)
 			}
