@@ -435,18 +435,10 @@ func (d *Dispatcher) showHelp() error {
 
 	children := d.getDirectChildren("")
 
-	// Find max length for alignment
-	maxLen := 0
 	for _, child := range children {
-		if len(child.Name) > maxLen {
-			maxLen = len(child.Name)
-		}
-	}
-
-	// Print commands with usage
-	for _, child := range children {
-		if child.Usage != "" {
-			fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
+		grandchildren := d.getDirectChildren(child.Path)
+		if len(grandchildren) > 0 {
+			fmt.Printf("  %s (%d sub-commands)\n", child.Name, len(grandchildren))
 		} else {
 			fmt.Printf("  %s\n", child.Name)
 		}
@@ -568,8 +560,15 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 
 		// Print sub-commands with usage
 		for _, child := range children {
+			grandchildren := d.getDirectChildren(child.Path)
+			suffix := ""
+			if len(grandchildren) > 0 {
+				suffix = fmt.Sprintf(" (%d sub-commands)", len(grandchildren))
+			}
 			if child.Usage != "" {
-				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
+				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
+			} else if suffix != "" {
+				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, suffix[1:])
 			} else {
 				fmt.Printf("  %s\n", child.Name)
 			}
@@ -704,8 +703,15 @@ func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 		}
 
 		for _, child := range children {
+			grandchildren := d.getDirectChildren(child.Path)
+			suffix := ""
+			if len(grandchildren) > 0 {
+				suffix = fmt.Sprintf(" (%d sub-commands)", len(grandchildren))
+			}
 			if child.Usage != "" {
-				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, child.Usage)
+				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
+			} else if suffix != "" {
+				fmt.Printf("  %-*s  %s\n", maxLen+2, child.Name, suffix[1:])
 			} else {
 				fmt.Printf("  %s\n", child.Name)
 			}
