@@ -167,11 +167,10 @@ func TestDispatcherHelp(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, output, "Available commands:")
 	assert.Contains(t, output, "build")
+	assert.Contains(t, output, "Build the project")
 	assert.Contains(t, output, "test")
+	assert.Contains(t, output, "Run tests")
 	assert.Contains(t, output, "clean")
-	// Top-level help should NOT show descriptions (short format)
-	assert.NotContains(t, output, "Build the project")
-	assert.NotContains(t, output, "Run tests")
 }
 
 func TestDispatcherCommandHelp(t *testing.T) {
@@ -1002,7 +1001,8 @@ func TestDispatcherNamespaceDiscovery(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Contains(t, output, "Available commands:")
 		assert.Contains(t, output, "build")
-		assert.Contains(t, output, "config (2 sub-commands)")
+		assert.Contains(t, output, "config")
+		assert.Contains(t, output, "(2 sub-commands)")
 		// Should NOT show the full subcommand paths at the top level
 		assert.NotContains(t, output, "config get")
 		assert.NotContains(t, output, "config set")

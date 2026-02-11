@@ -454,10 +454,24 @@ func (d *Dispatcher) showHelp() error {
 
 	children := d.getDirectChildren("")
 
+	// Find max length for alignment
+	maxLen := 0
+	for _, child := range children {
+		if len(child.Name) > maxLen {
+			maxLen = len(child.Name)
+		}
+	}
+
 	for _, child := range children {
 		grandchildren := d.getDirectChildren(child.Path)
+		suffix := ""
 		if len(grandchildren) > 0 {
-			fmt.Printf("  %s %s\n", child.Name, faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren))))
+			suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
+		}
+		if child.Usage != "" {
+			fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
+		} else if suffix != "" {
+			fmt.Printf("  %-*s %s\n", maxLen+2, child.Name, suffix)
 		} else {
 			fmt.Printf("  %s\n", child.Name)
 		}
