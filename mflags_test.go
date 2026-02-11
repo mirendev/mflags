@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -3286,4 +3287,277 @@ func TestDuplicateShortFlagPanics(t *testing.T) {
 	assert.PanicsWithValue(t, `short flag 'v' already registered for --verbose`, func() {
 		fs.String("version", 'v', "", "show version")
 	})
+}
+
+// captureStdout captures stdout output from the given function.
+func captureStdout(fn func()) string {
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	fn()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	return buf.String()
+}
+
+func TestFromStructSelfDeclaredGroup(t *testing.T) {
+	type GlobalOptions struct {
+		_       struct{} `group:"Global Options"`
+		Verbose bool     `long:"verbose" short:"v" usage:"Enable verbose output"`
+		Debug   bool     `long:"debug" short:"d" usage:"Enable debug mode"`
+	}
+
+	fs := NewFlagSet("test")
+	var opts GlobalOptions
+	err := fs.FromStruct(&opts)
+	assert.NoError(t, err)
+
+	// Verify all flags got the group
+	fs.VisitAll(func(flag *Flag) {
+		assert.Equal(t, "Global Options", flag.Group)
+	})
+}
+
+func TestFromStructWithGroup(t *testing.T) {
+	type Config struct {
+		Verbose bool   `long:"verbose" short:"v" usage:"Enable verbose output"`
+		Output  string `long:"output" short:"o" usage:"Output file"`
+	}
+
+	fs := NewFlagSet("test")
+	var cfg Config
+	err := fs.FromStruct(&cfg, InGroup("Build Options"))
+	assert.NoError(t, err)
+
+	// Verify all flags got the group from InGroup
+	fs.VisitAll(func(flag *Flag) {
+		assert.Equal(t, "Build Options", flag.Group)
+	})
+}
+
+func TestFromStructEmbeddedGroupTag(t *testing.T) {
+	type GlobalOptions struct {
+		Verbose bool `long:"verbose" short:"v" usage:"Enable verbose output"`
+	}
+
+	type Config struct {
+		GlobalOptions `group:"Global Options"`
+		Output        string `long:"output" short:"o" usage:"Output file"`
+	}
+
+	fs := NewFlagSet("test")
+	var cfg Config
+	err := fs.FromStruct(&cfg)
+	assert.NoError(t, err)
+
+	verboseFlag := fs.Lookup("verbose")
+	assert.NotNil(t, verboseFlag)
+	assert.Equal(t, "Global Options", verboseFlag.Group)
+
+	outputFlag := fs.Lookup("output")
+	assert.NotNil(t, outputFlag)
+	assert.Equal(t, "", outputFlag.Group)
+}
+
+func TestGroupPrecedence(t *testing.T) {
+	t.Run("InGroup overrides embedded tag", func(t *testing.T) {
+		type GlobalOptions struct {
+			Verbose bool `long:"verbose" short:"v" usage:"Enable verbose output"`
+		}
+
+		type Config struct {
+			GlobalOptions `group:"Embedded Name"`
+			Output        string `long:"output" short:"o" usage:"Output file"`
+		}
+
+		fs := NewFlagSet("test")
+		var cfg Config
+		err := fs.FromStruct(&cfg, InGroup("Caller Name"))
+		assert.NoError(t, err)
+
+		// InGroup should override the embedded tag for the parent struct's flags
+		outputFlag := fs.Lookup("output")
+		assert.Equal(t, "Caller Name", outputFlag.Group)
+
+		// The embedded struct gets its own group from the embedding site tag
+		verboseFlag := fs.Lookup("verbose")
+		assert.Equal(t, "Embedded Name", verboseFlag.Group)
+	})
+
+	t.Run("embedded tag overrides self-declaration", func(t *testing.T) {
+		type GlobalOptions struct {
+			_       struct{} `group:"Self Declared"`
+			Verbose bool     `long:"verbose" short:"v" usage:"Enable verbose output"`
+		}
+
+		type Config struct {
+			GlobalOptions `group:"Embedded Override"`
+			Output        string `long:"output" short:"o" usage:"Output file"`
+		}
+
+		fs := NewFlagSet("test")
+		var cfg Config
+		err := fs.FromStruct(&cfg)
+		assert.NoError(t, err)
+
+		verboseFlag := fs.Lookup("verbose")
+		assert.Equal(t, "Embedded Override", verboseFlag.Group)
+
+		outputFlag := fs.Lookup("output")
+		assert.Equal(t, "", outputFlag.Group)
+	})
+
+	t.Run("InGroup overrides self-declaration", func(t *testing.T) {
+		type GlobalOptions struct {
+			_       struct{} `group:"Self Declared"`
+			Verbose bool     `long:"verbose" short:"v" usage:"Enable verbose output"`
+		}
+
+		fs := NewFlagSet("test")
+		var opts GlobalOptions
+		err := fs.FromStruct(&opts, InGroup("Caller Override"))
+		assert.NoError(t, err)
+
+		verboseFlag := fs.Lookup("verbose")
+		assert.Equal(t, "Caller Override", verboseFlag.Group)
+	})
+}
+
+func TestGroupHelpOutput(t *testing.T) {
+	type GlobalOptions struct {
+		_       struct{} `group:"Global Options"`
+		Verbose bool     `long:"verbose" short:"v" usage:"Enable verbose output"`
+	}
+
+	type Config struct {
+		GlobalOptions
+		Output string `long:"output" short:"o" usage:"Output file"`
+	}
+
+	fs := NewFlagSet("test")
+	var cfg Config
+	err := fs.FromStruct(&cfg)
+	assert.NoError(t, err)
+
+	output := captureStdout(func() {
+		fs.WriteFlagHelp()
+	})
+
+	// Named groups come first
+	globalIdx := strings.Index(output, "Global Options:")
+	// Find standalone "Options:" (preceded by newline, not part of "Global Options:")
+	optionsIdx := strings.Index(output, "\nOptions:")
+	assert.Greater(t, globalIdx, -1, "should contain Global Options heading")
+	assert.Greater(t, optionsIdx, -1, "should contain Options heading")
+	assert.Less(t, globalIdx, optionsIdx, "Global Options should appear before Options")
+
+	// Verify flag placement
+	verboseIdx := strings.Index(output, "--verbose")
+	outputFlagIdx := strings.Index(output, "--output")
+	assert.Greater(t, verboseIdx, globalIdx, "verbose should be under Global Options")
+	assert.Less(t, verboseIdx, optionsIdx, "verbose should be before Options heading")
+	assert.Greater(t, outputFlagIdx, optionsIdx, "output should be under Options")
+}
+
+func TestGroupBackwardCompatibility(t *testing.T) {
+	// No groups = single "Options:" heading
+	fs := NewFlagSet("test")
+	fs.Bool("verbose", 'v', false, "verbose output")
+	fs.String("output", 'o', "", "output file")
+
+	output := captureStdout(func() {
+		fs.WriteFlagHelp()
+	})
+
+	assert.Contains(t, output, "Options:")
+	assert.Equal(t, 1, strings.Count(output, "Options:"), "should have exactly one Options heading")
+	assert.Contains(t, output, "--verbose")
+	assert.Contains(t, output, "--output")
+}
+
+func TestGroupMethodProgrammatic(t *testing.T) {
+	fs := NewFlagSet("test")
+
+	fs.Group("Network")
+	fs.String("host", 'H', "localhost", "server host")
+	fs.Int("port", 'p', 8080, "server port")
+
+	fs.Group("")
+	fs.Bool("verbose", 'v', false, "verbose output")
+
+	hostFlag := fs.Lookup("host")
+	assert.Equal(t, "Network", hostFlag.Group)
+
+	portFlag := fs.Lookup("port")
+	assert.Equal(t, "Network", portFlag.Group)
+
+	verboseFlag := fs.Lookup("verbose")
+	assert.Equal(t, "", verboseFlag.Group)
+
+	output := captureStdout(func() {
+		fs.WriteFlagHelp()
+	})
+
+	networkIdx := strings.Index(output, "Network:")
+	optionsIdx := strings.Index(output, "Options:")
+	assert.Greater(t, networkIdx, -1)
+	assert.Greater(t, optionsIdx, -1)
+	assert.Less(t, networkIdx, optionsIdx)
+}
+
+func TestGroupOrderPreserved(t *testing.T) {
+	fs := NewFlagSet("test")
+
+	fs.Group("Zebra")
+	fs.Bool("z-flag", 'z', false, "z flag")
+
+	fs.Group("Alpha")
+	fs.Bool("a-flag", 'a', false, "a flag")
+
+	fs.Group("")
+	fs.Bool("verbose", 'v', false, "verbose")
+
+	output := captureStdout(func() {
+		fs.WriteFlagHelp()
+	})
+
+	zebraIdx := strings.Index(output, "Zebra:")
+	alphaIdx := strings.Index(output, "Alpha:")
+	optionsIdx := strings.Index(output, "Options:")
+
+	// Insertion order: Zebra first, then Alpha, then default Options last
+	assert.Less(t, zebraIdx, alphaIdx, "Zebra should appear before Alpha (insertion order)")
+	assert.Less(t, alphaIdx, optionsIdx, "Alpha should appear before Options")
+}
+
+func TestShowHelpWithGroups(t *testing.T) {
+	type GlobalOptions struct {
+		_       struct{} `group:"Global Options"`
+		Verbose bool     `long:"verbose" short:"v" usage:"Enable verbose output"`
+	}
+
+	type Config struct {
+		GlobalOptions
+		Output string `long:"output" short:"o" usage:"Output file"`
+	}
+
+	fs := NewFlagSet("myapp")
+	var cfg Config
+	err := fs.FromStruct(&cfg)
+	assert.NoError(t, err)
+
+	output := captureStdout(func() {
+		fs.ShowHelp()
+	})
+
+	assert.Contains(t, output, "Usage: myapp [options]")
+	assert.Contains(t, output, "Global Options:")
+	assert.Contains(t, output, "Options:")
+	assert.Contains(t, output, "-v, --verbose")
+	assert.Contains(t, output, "-o, --output")
 }

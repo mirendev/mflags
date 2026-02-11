@@ -39,6 +39,8 @@ type FlagSet struct {
 	unknownFlags      []string                 // Accumulated unknown flags when allowUnknownFlags is true
 	unknownField      *[]string                // Pointer to field marked with "unknown" tag
 	disableAutoHelp   bool                     // If true, don't automatically handle -h/--help in Parse
+	currentGroup      string                   // ambient group name set by FromStruct options or Group() calls
+	groupOrder        []string                 // ordered list of distinct group names (insertion order)
 }
 
 type Flag struct {
@@ -47,6 +49,7 @@ type Flag struct {
 	Usage    string
 	Value    Value
 	DefValue string
+	Group    string // group name for help rendering; empty = default "Options:"
 }
 
 type Value interface {
@@ -1251,6 +1254,7 @@ func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 		Usage:    usage,
 		Value:    value,
 		DefValue: value.String(),
+		Group:    f.currentGroup,
 	}
 
 	if name != "" {
@@ -1266,9 +1270,26 @@ func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 		f.shortMap[short] = flag
 	}
 
+	// Track group insertion order
+	if f.currentGroup != "" {
+		found := false
+		for _, g := range f.groupOrder {
+			if g == f.currentGroup {
+				found = true
+				break
+			}
+		}
+		if !found {
+			f.groupOrder = append(f.groupOrder, f.currentGroup)
+		}
+	}
+
 	// Add to the list of all flags for iteration
 	f.allFlags = append(f.allFlags, flag)
 }
+
+// Group sets the current group name for subsequently registered flags.
+func (f *FlagSet) Group(name string) { f.currentGroup = name }
 
 // Lookup returns the Flag with the given name, or nil if not found
 func (f *FlagSet) Lookup(name string) *Flag {
@@ -1636,6 +1657,18 @@ func setFieldValue(fieldValue reflect.Value, value string) error {
 	return nil
 }
 
+// FromStructOption configures how FromStruct processes a struct.
+type FromStructOption func(*fromStructConfig)
+
+type fromStructConfig struct {
+	group string
+}
+
+// InGroup sets the group name for all flags created by FromStruct.
+func InGroup(name string) FromStructOption {
+	return func(c *fromStructConfig) { c.group = name }
+}
+
 // FromStruct creates flag definitions from a struct's fields using struct tags.
 // The argument must be a pointer to a struct. Struct tags control how fields are parsed:
 //   - `long:"name"` - long flag name (defaults to lowercase field name)
@@ -1647,10 +1680,12 @@ func setFieldValue(fieldValue reflect.Value, value string) error {
 //   - `position:"0"` - positional argument at index 0
 //   - `rest:"true"` - capture all remaining arguments in a []string field
 //   - `unknown:"true"` - capture unknown flags in a []string field (automatically enables AllowUnknownFlags)
+//   - `group:"name"` - on a `_ struct{}` field, declares the group for all flags in the struct
+//   - `group:"name"` - on an embedded struct field, overrides the embedded struct's self-declared group
 //
 // Supports bool, string, int, []string, and time.Duration field types.
 // Anonymous embedded structs are recursively processed.
-func (f *FlagSet) FromStruct(v any) error {
+func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return fmt.Errorf("FromStruct requires a non-nil pointer to a struct")
@@ -1661,9 +1696,41 @@ func (f *FlagSet) FromStruct(v any) error {
 		return fmt.Errorf("FromStruct requires a pointer to a struct")
 	}
 
+	// Apply options
+	var cfg fromStructConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	// Save and restore currentGroup
+	prevGroup := f.currentGroup
+	defer func() { f.currentGroup = prevGroup }()
+
+	if cfg.group != "" {
+		f.currentGroup = cfg.group
+	}
+
 	rt := rv.Type()
+
+	// First pass: check for self-declared group via `_ struct{} \`group:"..."\``
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
+		if field.Name == "_" && field.Type == reflect.TypeOf(struct{}{}) {
+			if groupTag := field.Tag.Get("group"); groupTag != "" && f.currentGroup == "" {
+				f.currentGroup = groupTag
+			}
+			break
+		}
+	}
+
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+
+		// Skip the `_` group declaration field
+		if field.Name == "_" {
+			continue
+		}
+
 		if !field.IsExported() {
 			continue
 		}
@@ -1675,8 +1742,15 @@ func (f *FlagSet) FromStruct(v any) error {
 
 		// Check for anonymous/embedded struct fields and descend into them
 		if field.Anonymous && field.Type.Kind() == reflect.Struct {
-			if err := f.FromStruct(fieldValue.Addr().Interface()); err != nil {
-				return err
+			// Check for group tag on the embedding site
+			if groupTag := field.Tag.Get("group"); groupTag != "" {
+				if err := f.FromStruct(fieldValue.Addr().Interface(), InGroup(groupTag)); err != nil {
+					return err
+				}
+			} else {
+				if err := f.FromStruct(fieldValue.Addr().Interface()); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -1913,6 +1987,80 @@ func (f *FlagSet) FromStruct(v any) error {
 	return nil
 }
 
+// formatFlagLine formats a single flag for help output.
+func formatFlagLine(flag *Flag) string {
+	var flagStr string
+	if flag.Short != 0 && flag.Name != "" {
+		flagStr = fmt.Sprintf("  -%c, --%s", flag.Short, flag.Name)
+	} else if flag.Short != 0 {
+		flagStr = fmt.Sprintf("  -%c", flag.Short)
+	} else {
+		flagStr = fmt.Sprintf("      --%s", flag.Name)
+	}
+
+	// Add value placeholder for non-boolean flags
+	if !flag.Value.IsBool() {
+		flagStr += fmt.Sprintf(" <%s>", flag.Value.Type())
+	}
+
+	// Format with usage
+	if flag.Usage != "" {
+		line := fmt.Sprintf("%-30s %s", flagStr, flag.Usage)
+		if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "0" {
+			line += fmt.Sprintf(" (default: %s)", flag.DefValue)
+		}
+		return line
+	}
+	return flagStr
+}
+
+// WriteFlagHelp writes group-aware flag help output to stdout.
+// Named groups are printed first in insertion order, followed by the default
+// (unnamed) group under "Options:".
+func (f *FlagSet) WriteFlagHelp() {
+	// Collect flags into groups, preserving VisitAll sort order
+	type groupFlags struct {
+		name  string
+		flags []*Flag
+	}
+
+	groupMap := make(map[string]*groupFlags)
+	var defaultFlags []*Flag
+
+	f.VisitAll(func(flag *Flag) {
+		if flag.Group == "" {
+			defaultFlags = append(defaultFlags, flag)
+		} else {
+			gf, ok := groupMap[flag.Group]
+			if !ok {
+				gf = &groupFlags{name: flag.Group}
+				groupMap[flag.Group] = gf
+			}
+			gf.flags = append(gf.flags, flag)
+		}
+	})
+
+	// Print named groups in insertion order
+	for _, groupName := range f.groupOrder {
+		gf, ok := groupMap[groupName]
+		if !ok || len(gf.flags) == 0 {
+			continue
+		}
+		fmt.Printf("\n%s:\n", gf.name)
+		for _, flag := range gf.flags {
+			fmt.Println(formatFlagLine(flag))
+		}
+	}
+
+	// Print default group last
+	if len(defaultFlags) > 0 {
+		fmt.Println("\nOptions:")
+		for _, flag := range defaultFlags {
+			fmt.Println(formatFlagLine(flag))
+		}
+	}
+}
+
 // ShowHelp displays help information for the flag set, including all defined flags
 // and their usage information.
 func (f *FlagSet) ShowHelp() {
@@ -1969,40 +2117,7 @@ func (f *FlagSet) ShowHelp() {
 		}
 	}
 
-	// Show flags if any are defined
-	hasFlags := false
-	f.VisitAll(func(flag *Flag) {
-		if !hasFlags {
-			fmt.Println("\nOptions:")
-			hasFlags = true
-		}
-
-		// Format flag display
-		var flagStr string
-		if flag.Short != 0 && flag.Name != "" {
-			flagStr = fmt.Sprintf("  -%c, --%s", flag.Short, flag.Name)
-		} else if flag.Short != 0 {
-			flagStr = fmt.Sprintf("  -%c", flag.Short)
-		} else {
-			flagStr = fmt.Sprintf("      --%s", flag.Name)
-		}
-
-		// Add value placeholder for non-boolean flags
-		if !flag.Value.IsBool() {
-			flagStr += fmt.Sprintf(" <%s>", flag.Value.Type())
-		}
-
-		// Print flag with usage
-		if flag.Usage != "" {
-			fmt.Printf("%-30s %s", flagStr, flag.Usage)
-			if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "0" {
-				fmt.Printf(" (default: %s)", flag.DefValue)
-			}
-			fmt.Println()
-		} else {
-			fmt.Println(flagStr)
-		}
-	})
+	f.WriteFlagHelp()
 }
 
 // ParseStruct parses command line arguments and updates the struct fields.
