@@ -964,7 +964,7 @@ func TestDispatcherSubCommandHelp(t *testing.T) {
 	// Should not show nested sub-command "remote add", only direct children
 	assert.NotContains(t, output, "remote add")
 	// "remote" is a namespace with 1 sub-command, should show the count
-	assert.Contains(t, output, "(1 sub-commands)")
+	assert.Contains(t, output, "(1 sub-command)")
 }
 
 func TestDispatcherNamespaceDiscovery(t *testing.T) {

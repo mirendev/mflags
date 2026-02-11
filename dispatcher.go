@@ -27,6 +27,13 @@ func faint(s string) string {
 	return "\033[2m" + s + "\033[0m"
 }
 
+func subCommandsLabel(n int) string {
+	if n == 1 {
+		return "(1 sub-command)"
+	}
+	return fmt.Sprintf("(%d sub-commands)", n)
+}
+
 // Command is an interface for executable commands
 type Command interface {
 	// FlagSet returns the flagset for this command
@@ -466,7 +473,7 @@ func (d *Dispatcher) showHelp() error {
 		grandchildren := d.getDirectChildren(child.Path)
 		suffix := ""
 		if len(grandchildren) > 0 {
-			suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
+			suffix = " " + faint(subCommandsLabel(len(grandchildren)))
 		}
 		if child.Usage != "" {
 			fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
@@ -596,7 +603,7 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 			grandchildren := d.getDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
-				suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
+				suffix = " " + faint(subCommandsLabel(len(grandchildren)))
 			}
 			if child.Usage != "" {
 				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
@@ -739,7 +746,7 @@ func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 			grandchildren := d.getDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
-				suffix = " " + faint(fmt.Sprintf("(%d sub-commands)", len(grandchildren)))
+				suffix = " " + faint(subCommandsLabel(len(grandchildren)))
 			}
 			if child.Usage != "" {
 				fmt.Printf("  %-*s  %s%s\n", maxLen+2, child.Name, child.Usage, suffix)
