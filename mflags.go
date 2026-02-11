@@ -1254,9 +1254,15 @@ func (f *FlagSet) Var(value Value, name string, short rune, usage string) {
 	}
 
 	if name != "" {
+		if existing, ok := f.flags[name]; ok {
+			panic(fmt.Sprintf("flag %q already registered as --%s", name, existing.Name))
+		}
 		f.flags[name] = flag
 	}
 	if short != 0 {
+		if existing, ok := f.shortMap[short]; ok {
+			panic(fmt.Sprintf("short flag '%c' already registered for --%s", short, existing.Name))
+		}
 		f.shortMap[short] = flag
 	}
 
