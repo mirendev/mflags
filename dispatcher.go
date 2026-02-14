@@ -46,6 +46,18 @@ type Command interface {
 	Usage() string
 }
 
+// ExampleProvider is an interface for commands that provide usage examples.
+type ExampleProvider interface {
+	// Examples returns the examples for this command.
+	Examples() []Example
+}
+
+// Example represents a usage example for a command.
+type Example struct {
+	Name string // Short description of what the example demonstrates
+	Body string // The example command line or code
+}
+
 // OutputFormatter is an interface for commands that can specify their output format
 type OutputFormatter interface {
 	// OutputFormat returns the output format for this command
@@ -65,6 +77,7 @@ type funcCommand struct {
 	flags        *FlagSet
 	handler      func(fs *FlagSet, args []string) error
 	usage        string
+	examples     []Example
 	outputFormat OutputFormat
 }
 
@@ -75,6 +88,13 @@ type CommandOption func(*funcCommand)
 func WithUsage(usage string) CommandOption {
 	return func(c *funcCommand) {
 		c.usage = usage
+	}
+}
+
+// WithExamples sets the usage examples for the command.
+func WithExamples(examples ...Example) CommandOption {
+	return func(c *funcCommand) {
+		c.examples = examples
 	}
 }
 
@@ -118,6 +138,11 @@ func (c *funcCommand) Run(fs *FlagSet, args []string) error {
 // Usage returns the usage description for this command
 func (c *funcCommand) Usage() string {
 	return c.usage
+}
+
+// Examples returns the usage examples for this command.
+func (c *funcCommand) Examples() []Example {
+	return c.examples
 }
 
 // OutputFormat returns the output format for this command
