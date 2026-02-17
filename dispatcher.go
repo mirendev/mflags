@@ -58,6 +58,12 @@ type Example struct {
 	Body string // The example command line or code
 }
 
+// RequiredFeatureProvider is an interface for commands that require a feature flag to be enabled.
+type RequiredFeatureProvider interface {
+	// RequiredFeature returns the name of the feature flag required for this command.
+	RequiredFeature() string
+}
+
 // OutputFormatter is an interface for commands that can specify their output format
 type OutputFormatter interface {
 	// OutputFormat returns the output format for this command

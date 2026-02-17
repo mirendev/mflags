@@ -18,6 +18,7 @@ type HelpDocument struct {
 type CommandDoc struct {
 	Path            string          `json:"path"`
 	Usage           string          `json:"usage"`
+	RequiredFeature string          `json:"requiredFeature,omitempty"`
 	Flags           []FlagDoc       `json:"flags"`
 	FlagGroups      []string        `json:"flagGroups"`
 	PositionalArgs  []PositionalDoc `json:"positionalArgs,omitempty"`
@@ -157,6 +158,9 @@ func (d *Dispatcher) buildCommandDocs(parentPath string) []CommandDoc {
 							Body: ex.Body,
 						})
 					}
+				}
+				if rfp, ok := entry.Command.(RequiredFeatureProvider); ok {
+					cmd.RequiredFeature = rfp.RequiredFeature()
 				}
 			}
 		}
