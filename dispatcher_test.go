@@ -1698,3 +1698,4 @@ func TestDispatcherErrShowHelp(t *testing.T) {
 		assert.Contains(t, output, "Usage: myapp test")
 	})
 }
+
