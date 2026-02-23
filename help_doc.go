@@ -18,6 +18,7 @@ type HelpDocument struct {
 type CommandDoc struct {
 	Path            string          `json:"path"`
 	Usage           string          `json:"usage"`
+	Description     string          `json:"description,omitempty"`
 	RequiredFeature string          `json:"requiredFeature,omitempty"`
 	Flags           []FlagDoc       `json:"flags"`
 	FlagGroups      []string        `json:"flagGroups"`
@@ -161,6 +162,9 @@ func (d *Dispatcher) buildCommandDocs(parentPath string) []CommandDoc {
 				}
 				if rfp, ok := entry.Command.(RequiredFeatureProvider); ok {
 					cmd.RequiredFeature = rfp.RequiredFeature()
+				}
+				if dp, ok := entry.Command.(DescriptionProvider); ok {
+					cmd.Description = dp.Description()
 				}
 			}
 		}

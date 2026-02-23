@@ -52,6 +52,12 @@ type ExampleProvider interface {
 	Examples() []Example
 }
 
+// DescriptionProvider is an interface for commands that provide an extended description.
+type DescriptionProvider interface {
+	// Description returns the extended markdown description for this command.
+	Description() string
+}
+
 // Example represents a usage example for a command.
 type Example struct {
 	Name string // Short description of what the example demonstrates
