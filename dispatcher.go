@@ -212,13 +212,21 @@ func (d *Dispatcher) Execute(args []string) error {
 	}
 
 	// Check for help flags anywhere in the arguments, but stop at --
+	// When "help" is registered as a command, don't treat bare "help" as a
+	// help keyword when it appears as the first argument — let the registered
+	// command handle it instead.
 	hasHelp := false
-	for _, arg := range args {
+	helpIsCommand := d.HasCommand("help")
+	for i, arg := range args {
 		if arg == "--" {
 			// Stop processing flags after --
 			break
 		}
-		if arg == "-h" || arg == "--help" || arg == "help" {
+		if arg == "-h" || arg == "--help" {
+			hasHelp = true
+			break
+		}
+		if arg == "help" && !(i == 0 && helpIsCommand) {
 			hasHelp = true
 			break
 		}
@@ -765,6 +773,16 @@ func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 
 	fmt.Printf("\nUse '%s %s <command> --help' for more information about a command.\n", d.name, namespacePath)
 	return nil
+}
+
+// ShowCommandHelp displays help for the command at the given path.
+// Returns an error if the command is not found.
+func (d *Dispatcher) ShowCommandHelp(path string) error {
+	entry := d.GetCommandEntry(path)
+	if entry == nil {
+		return fmt.Errorf("unknown command: %s", path)
+	}
+	return d.showCommandHelp(entry)
 }
 
 // GetCommand returns the command for a given path, or nil if not found
