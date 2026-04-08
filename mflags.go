@@ -1919,7 +1919,9 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 				// Environment variable sets the positional default
 				if posEnvVar != "" {
 					if envVal, ok := os.LookupEnv(posEnvVar); ok {
-						setFieldValue(fieldValue, envVal)
+						if err := setFieldValue(fieldValue, envVal); err != nil {
+							return fmt.Errorf("invalid value for env var %s: %w", posEnvVar, err)
+						}
 						posHasValue = true
 					}
 				}
