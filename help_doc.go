@@ -36,21 +36,25 @@ type ExampleDoc struct {
 
 // FlagDoc describes a single flag in the help document.
 type FlagDoc struct {
-	Name    string   `json:"name"`
-	Short   string   `json:"short"`
-	Type    string   `json:"type"`
-	Default string   `json:"default,omitempty"`
-	Usage   string   `json:"usage"`
-	Group   string   `json:"group,omitempty"`
-	IsBool  bool     `json:"isBool,omitempty"`
-	Choices []string `json:"choices,omitempty"`
+	Name     string   `json:"name"`
+	Short    string   `json:"short"`
+	Type     string   `json:"type"`
+	Default  string   `json:"default,omitempty"`
+	Usage    string   `json:"usage"`
+	Group    string   `json:"group,omitempty"`
+	IsBool   bool     `json:"isBool,omitempty"`
+	Choices  []string `json:"choices,omitempty"`
+	EnvVar   string   `json:"envVar,omitempty"`
+	Required bool     `json:"required,omitempty"`
 }
 
 // PositionalDoc describes a positional argument in the help document.
 type PositionalDoc struct {
-	Name  string `json:"name"`
-	Usage string `json:"usage"`
-	Type  string `json:"type"`
+	Name     string `json:"name"`
+	Usage    string `json:"usage"`
+	Type     string `json:"type"`
+	EnvVar   string `json:"envVar,omitempty"`
+	Required bool   `json:"required,omitempty"`
 }
 
 // FlagSetDoc describes a standalone FlagSet's help information.
@@ -74,13 +78,15 @@ func (f *FlagSet) HelpDoc() *FlagSetDoc {
 
 	f.VisitAll(func(flag *Flag) {
 		fd := FlagDoc{
-			Name:    flag.Name,
-			Type:    flag.Value.Type(),
-			Default: flag.DefValue,
-			Usage:   flag.Usage,
-			Group:   flag.Group,
-			IsBool:  flag.Value.IsBool(),
-			Choices: []string{},
+			Name:     flag.Name,
+			Type:     flag.Value.Type(),
+			Default:  flag.DefValue,
+			Usage:    flag.Usage,
+			Group:    flag.Group,
+			IsBool:   flag.Value.IsBool(),
+			Choices:  []string{},
+			EnvVar:   flag.EnvVar,
+			Required: flag.Required,
 		}
 		if flag.Short != 0 {
 			fd.Short = string(flag.Short)
@@ -97,9 +103,11 @@ func (f *FlagSet) HelpDoc() *FlagSetDoc {
 
 	for _, pf := range f.GetPositionalFields() {
 		doc.PositionalArgs = append(doc.PositionalArgs, PositionalDoc{
-			Name:  pf.Name,
-			Usage: pf.Usage,
-			Type:  pf.Type.String(),
+			Name:     pf.Name,
+			Usage:    pf.Usage,
+			Type:     pf.Type.String(),
+			EnvVar:   pf.EnvVar,
+			Required: pf.Required,
 		})
 	}
 
