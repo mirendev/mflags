@@ -859,6 +859,90 @@ func TestFromStructErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "pointer to a struct")
 }
 
+func TestFromStructRejectsUnknownTags(t *testing.T) {
+	t.Run("single unknown tag", func(t *testing.T) {
+		type Opts struct {
+			Args struct{} `positional-args:"yes"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown struct tag "positional-args"`)
+		assert.Contains(t, err.Error(), "Args")
+	})
+
+	t.Run("multiple unknown tags across fields", func(t *testing.T) {
+		type Opts struct {
+			Name string `long:"name" env:"MY_NAME"`
+			Port int    `long:"port" required:"true"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `"env"`)
+		assert.Contains(t, err.Error(), `"required"`)
+	})
+
+	t.Run("non-mflags tag like json", func(t *testing.T) {
+		type Opts struct {
+			Name string `json:"name"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `"json"`)
+	})
+
+	t.Run("embedded struct with unknown tags", func(t *testing.T) {
+		type Inner struct {
+			Addr string `long:"addr" yaml:"addr"`
+		}
+		type Outer struct {
+			Inner
+			Verbose bool `long:"verbose"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Outer{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `"yaml"`)
+		assert.Contains(t, err.Error(), "Addr")
+	})
+
+	t.Run("unexported fields with arbitrary tags are ignored", func(t *testing.T) {
+		type Opts struct {
+			Verbose  bool   `long:"verbose"`
+			internal string `json:"internal" xml:"internal"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("valid tags pass", func(t *testing.T) {
+		type Opts struct {
+			Name    string   `long:"name" short:"n" default:"world" description:"Your name"`
+			Verbose bool     `long:"verbose" usage:"Enable verbose"`
+			Env     string   `long:"env" choice:"dev" choice:"prod"`
+			File    string   `position:"0"`
+			Rest    []string `rest:"true"`
+			Unknown []string `unknown:"true"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("group tag on blank field is allowed", func(t *testing.T) {
+		type Opts struct {
+			_       struct{} `group:"Server Options"`
+			Verbose bool     `long:"verbose"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.NoError(t, err)
+	})
+}
+
 type CombinedUsageConfig struct {
 	Verbose bool          `long:"verbose" short:"v"`
 	Files   []string      `long:"files" short:"f"`
