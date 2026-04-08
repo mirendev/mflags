@@ -873,14 +873,24 @@ func TestFromStructRejectsUnknownTags(t *testing.T) {
 
 	t.Run("multiple unknown tags across fields", func(t *testing.T) {
 		type Opts struct {
+			Name string `long:"name" bogus:"yes"`
+			Port int    `long:"port" nope:"true"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `"bogus"`)
+		assert.Contains(t, err.Error(), `"nope"`)
+	})
+
+	t.Run("env and required are recognized tags", func(t *testing.T) {
+		type Opts struct {
 			Name string `long:"name" env:"MY_NAME"`
 			Port int    `long:"port" required:"true"`
 		}
 		fs := NewFlagSet("test")
 		err := fs.FromStruct(&Opts{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), `"env"`)
-		assert.Contains(t, err.Error(), `"required"`)
+		assert.NoError(t, err)
 	})
 
 	t.Run("non-mflags tag like json", func(t *testing.T) {
@@ -3644,4 +3654,296 @@ func TestShowHelpWithGroups(t *testing.T) {
 	assert.Contains(t, output, "Options:")
 	assert.Contains(t, output, "-v, --verbose")
 	assert.Contains(t, output, "-o, --output")
+}
+
+// --- env tag tests ---
+
+func TestFromStructEnvFlag(t *testing.T) {
+	type Config struct {
+		Name string `long:"name" env:"TEST_MFLAGS_NAME"`
+	}
+
+	t.Run("picks up env var", func(t *testing.T) {
+		t.Setenv("TEST_MFLAGS_NAME", "from-env")
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-env", config.Name)
+	})
+
+	t.Run("env overrides default", func(t *testing.T) {
+		type ConfigWithDefault struct {
+			Name string `long:"name" default:"hardcoded" env:"TEST_MFLAGS_NAME"`
+		}
+		t.Setenv("TEST_MFLAGS_NAME", "from-env")
+		config := &ConfigWithDefault{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-env", config.Name)
+	})
+
+	t.Run("CLI arg overrides env", func(t *testing.T) {
+		t.Setenv("TEST_MFLAGS_NAME", "from-env")
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{"--name", "from-cli"})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-cli", config.Name)
+	})
+
+	t.Run("unset env uses default", func(t *testing.T) {
+		type ConfigWithDefault struct {
+			Name string `long:"name" default:"hardcoded" env:"TEST_MFLAGS_NAME_UNSET"`
+		}
+		config := &ConfigWithDefault{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "hardcoded", config.Name)
+	})
+
+	t.Run("env with int flag", func(t *testing.T) {
+		type ConfigInt struct {
+			Count int `long:"count" env:"TEST_MFLAGS_COUNT"`
+		}
+		t.Setenv("TEST_MFLAGS_COUNT", "42")
+		config := &ConfigInt{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, 42, config.Count)
+	})
+
+	t.Run("env with invalid int errors", func(t *testing.T) {
+		type ConfigInt struct {
+			Count int `long:"count" env:"TEST_MFLAGS_COUNT"`
+		}
+		t.Setenv("TEST_MFLAGS_COUNT", "abc")
+		config := &ConfigInt{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "TEST_MFLAGS_COUNT")
+	})
+
+	t.Run("env with pointer type", func(t *testing.T) {
+		type ConfigPtr struct {
+			Name *string `long:"name" env:"TEST_MFLAGS_PTR_NAME"`
+		}
+		t.Setenv("TEST_MFLAGS_PTR_NAME", "from-env")
+		config := &ConfigPtr{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Name)
+		assert.Equal(t, "from-env", *config.Name)
+	})
+
+	t.Run("env with bool flag", func(t *testing.T) {
+		type ConfigBool struct {
+			Verbose bool `long:"verbose" env:"TEST_MFLAGS_VERBOSE"`
+		}
+		t.Setenv("TEST_MFLAGS_VERBOSE", "true")
+		config := &ConfigBool{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.True(t, config.Verbose)
+	})
+}
+
+func TestFromStructEnvPositional(t *testing.T) {
+	type Config struct {
+		Target string `position:"0" env:"TEST_MFLAGS_TARGET"`
+	}
+
+	t.Run("picks up env var", func(t *testing.T) {
+		t.Setenv("TEST_MFLAGS_TARGET", "from-env")
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-env", config.Target)
+	})
+
+	t.Run("CLI arg overrides env", func(t *testing.T) {
+		t.Setenv("TEST_MFLAGS_TARGET", "from-env")
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{"from-cli"})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-cli", config.Target)
+	})
+}
+
+func TestEnvHelpText(t *testing.T) {
+	type Config struct {
+		Name string `long:"name" env:"MY_APP_NAME" usage:"Application name"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	fs.WriteFlagHelp()
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	assert.Contains(t, output, "(env: MY_APP_NAME)")
+}
+
+// --- required tag tests ---
+
+func TestFromStructRequiredFlag(t *testing.T) {
+	type Config struct {
+		Name string `long:"name" required:"true"`
+	}
+
+	t.Run("errors when not provided", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrRequired)
+		assert.Contains(t, err.Error(), "--name")
+	})
+
+	t.Run("succeeds when provided via CLI", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{"--name", "hello"})
+		assert.NoError(t, err)
+		assert.Equal(t, "hello", config.Name)
+	})
+
+	t.Run("succeeds when provided via env", func(t *testing.T) {
+		type ConfigEnv struct {
+			Name string `long:"name" required:"true" env:"TEST_MFLAGS_REQ_NAME"`
+		}
+		t.Setenv("TEST_MFLAGS_REQ_NAME", "from-env")
+		config := &ConfigEnv{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-env", config.Name)
+	})
+
+	t.Run("multiple missing reports all", func(t *testing.T) {
+		type ConfigMulti struct {
+			Name string `long:"name" required:"true"`
+			Host string `long:"host" required:"true"`
+		}
+		config := &ConfigMulti{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrRequired)
+		assert.Contains(t, err.Error(), "--name")
+		assert.Contains(t, err.Error(), "--host")
+	})
+}
+
+func TestFromStructRequiredPositional(t *testing.T) {
+	type Config struct {
+		Command string `position:"0" required:"true"`
+	}
+
+	t.Run("errors when not provided", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrRequired)
+		assert.Contains(t, err.Error(), "Command")
+	})
+
+	t.Run("succeeds when provided", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{"deploy"})
+		assert.NoError(t, err)
+		assert.Equal(t, "deploy", config.Command)
+	})
+
+	t.Run("succeeds when provided via env", func(t *testing.T) {
+		type ConfigEnv struct {
+			Command string `position:"0" required:"true" env:"TEST_MFLAGS_CMD"`
+		}
+		t.Setenv("TEST_MFLAGS_CMD", "from-env")
+		config := &ConfigEnv{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.Equal(t, "from-env", config.Command)
+	})
+}
+
+func TestRequiredBoolFlag(t *testing.T) {
+	type Config struct {
+		Accept bool `long:"accept" required:"true"`
+	}
+
+	t.Run("errors when not provided", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrRequired)
+	})
+
+	t.Run("succeeds when provided", func(t *testing.T) {
+		config := &Config{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{"--accept"})
+		assert.NoError(t, err)
+		assert.True(t, config.Accept)
+	})
 }
