@@ -46,7 +46,6 @@ type FlagSet struct {
 	disableAutoHelp   bool                     // If true, don't automatically handle -h/--help in Parse
 	currentGroup      string                   // ambient group name set by FromStruct options or Group() calls
 	groupOrder        []string                 // ordered list of distinct group names (insertion order)
-	setFlags          map[string]bool          // flags explicitly set during Parse
 	requiredFlags     []string                 // flag names marked required:"true"
 	requiredPos       []int                    // positional indices marked required:"true"
 }
@@ -876,7 +875,6 @@ func NewFlagSet(name string) *FlagSet {
 		flags:     make(map[string]*Flag),
 		shortMap:  make(map[rune]*Flag),
 		posFields: make(map[int]*PositionalField),
-		setFlags:  make(map[string]bool),
 	}
 }
 
@@ -1538,7 +1536,7 @@ func (f *FlagSet) parseLongFlag(name string, args []string, index *int) (bool, e
 	}
 
 	flag.HasValue = true
-	f.setFlags[flag.Name] = true
+
 
 	return true, nil
 }
@@ -1564,7 +1562,7 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 				return fmt.Errorf("%w: -%c: %v", ErrInvalidValue, r, err)
 			}
 			flag.HasValue = true
-			f.setFlags[flag.Name] = true
+		
 		} else {
 			// Check if there are more characters after this flag
 			if i < len(runes)-1 {
@@ -1580,7 +1578,7 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 					return fmt.Errorf("%w: -%c: %v", ErrInvalidValue, r, err)
 				}
 				flag.HasValue = true
-				f.setFlags[flag.Name] = true
+			
 				break
 			} else if *index+1 < len(args) {
 				value := args[*index+1]
@@ -1589,7 +1587,7 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 					return fmt.Errorf("%w: -%c: %v", ErrInvalidValue, r, err)
 				}
 				flag.HasValue = true
-				f.setFlags[flag.Name] = true
+			
 			} else {
 				return fmt.Errorf("%w: -%c", ErrMissingValue, r)
 			}
