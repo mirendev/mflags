@@ -1674,6 +1674,8 @@ var knownTags = map[string]bool{
 	"long":        true,
 	"short":       true,
 	"default":     true,
+	"env":         true,
+	"required":    true,
 	"usage":       true,
 	"description": true,
 	"choice":      true,

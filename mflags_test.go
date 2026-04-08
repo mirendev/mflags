@@ -873,14 +873,24 @@ func TestFromStructRejectsUnknownTags(t *testing.T) {
 
 	t.Run("multiple unknown tags across fields", func(t *testing.T) {
 		type Opts struct {
+			Name string `long:"name" bogus:"yes"`
+			Port int    `long:"port" nope:"true"`
+		}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(&Opts{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `"bogus"`)
+		assert.Contains(t, err.Error(), `"nope"`)
+	})
+
+	t.Run("env and required are recognized tags", func(t *testing.T) {
+		type Opts struct {
 			Name string `long:"name" env:"MY_NAME"`
 			Port int    `long:"port" required:"true"`
 		}
 		fs := NewFlagSet("test")
 		err := fs.FromStruct(&Opts{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), `"env"`)
-		assert.Contains(t, err.Error(), `"required"`)
+		assert.NoError(t, err)
 	})
 
 	t.Run("non-mflags tag like json", func(t *testing.T) {
