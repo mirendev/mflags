@@ -3716,6 +3716,33 @@ func TestFromStructEnvFlag(t *testing.T) {
 		assert.Equal(t, 42, config.Count)
 	})
 
+	t.Run("env with invalid int errors", func(t *testing.T) {
+		type ConfigInt struct {
+			Count int `long:"count" env:"TEST_MFLAGS_COUNT"`
+		}
+		t.Setenv("TEST_MFLAGS_COUNT", "abc")
+		config := &ConfigInt{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "TEST_MFLAGS_COUNT")
+	})
+
+	t.Run("env with pointer type", func(t *testing.T) {
+		type ConfigPtr struct {
+			Name *string `long:"name" env:"TEST_MFLAGS_PTR_NAME"`
+		}
+		t.Setenv("TEST_MFLAGS_PTR_NAME", "from-env")
+		config := &ConfigPtr{}
+		fs := NewFlagSet("test")
+		err := fs.FromStruct(config)
+		assert.NoError(t, err)
+		err = fs.Parse([]string{})
+		assert.NoError(t, err)
+		assert.NotNil(t, config.Name)
+		assert.Equal(t, "from-env", *config.Name)
+	})
+
 	t.Run("env with bool flag", func(t *testing.T) {
 		type ConfigBool struct {
 			Verbose bool `long:"verbose" env:"TEST_MFLAGS_VERBOSE"`

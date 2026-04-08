@@ -1817,6 +1817,8 @@ func InGroup(name string) FromStructOption {
 //   - `long:"name"` - long flag name (defaults to lowercase field name)
 //   - `short:"x"` - short flag name (single character)
 //   - `default:"value"` - default value for the flag
+//   - `env:"VAR_NAME"` - populate default from an environment variable (overrides default, overridden by CLI)
+//   - `required:"true"` - return a parse error if the flag/positional wasn't provided
 //   - `usage:"description"` - usage description
 //   - `description:"description"` - alternate usage description
 //   - `choice:"value"` - constrain string field to specific values (can be repeated for multiple choices)
@@ -1979,15 +1981,6 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 		defaultValue := field.Tag.Get("default")
 		envVar := field.Tag.Get("env")
 		required := field.Tag.Get("required") == "true"
-
-		// Environment variable overrides default
-		hasEnvValue := false
-		if envVar != "" {
-			if envVal, ok := os.LookupEnv(envVar); ok {
-				defaultValue = envVal
-				hasEnvValue = true
-			}
-		}
 
 		usage := field.Tag.Get("usage")
 		if usage == "" {
@@ -2168,11 +2161,20 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 			}
 		}
 
-		// Set env/required metadata on the registered flag
+		// Set env/required metadata on the registered flag, and apply
+		// env var value through the flag's Value.Set path so it gets
+		// validated and works for all types including pointers and slices.
 		if flag, ok := f.flags[longName]; ok {
 			flag.EnvVar = envVar
 			flag.Required = required
-			flag.HasValue = hasEnvValue
+			if envVar != "" {
+				if envVal, ok := os.LookupEnv(envVar); ok {
+					if err := flag.Value.Set(envVal); err != nil {
+						return fmt.Errorf("invalid value for env var %s: %w", envVar, err)
+					}
+					flag.HasValue = true
+				}
+			}
 		}
 	}
 
