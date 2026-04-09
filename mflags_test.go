@@ -921,7 +921,7 @@ func TestFromStructRejectsUnknownTags(t *testing.T) {
 	t.Run("unexported fields with arbitrary tags are ignored", func(t *testing.T) {
 		type Opts struct {
 			Verbose  bool   `long:"verbose"`
-			internal string `json:"internal" xml:"internal"`
+			internal string //nolint:unused // present to verify unexported fields are skipped
 		}
 		fs := NewFlagSet("test")
 		err := fs.FromStruct(&Opts{})
