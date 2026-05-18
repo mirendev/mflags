@@ -1713,8 +1713,11 @@ func TestGetDirectChildrenPopulatesGroup(t *testing.T) {
 		groups[child.Name] = child.Group
 	}
 
+	assert.Contains(t, groups, "deploy")
 	assert.Equal(t, "", groups["deploy"])
+	assert.Contains(t, groups, "server")
 	assert.Equal(t, "Operator", groups["server"])
+	assert.Contains(t, groups, "debug")
 	assert.Equal(t, "Operator", groups["debug"])
 }
 
@@ -1753,7 +1756,9 @@ func TestHelpDocIncludesGroup(t *testing.T) {
 		groups[cmd.Path] = cmd.Group
 	}
 
+	assert.Contains(t, groups, "deploy")
 	assert.Equal(t, "", groups["deploy"])
+	assert.Contains(t, groups, "server")
 	assert.Equal(t, "Operator", groups["server"])
 }
 

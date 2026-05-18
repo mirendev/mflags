@@ -695,6 +695,7 @@ type ChildEntry struct {
 // registered commands and implicit namespaces. If parentPath is empty, returns
 // top-level entries.
 func (d *Dispatcher) GetDirectChildren(parentPath string) []ChildEntry {
+	parentPath = normalizeCommandPath(parentPath)
 	children := make(map[string]*ChildEntry)
 
 	for path, entry := range d.commands {
