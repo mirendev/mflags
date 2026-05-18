@@ -3947,3 +3947,51 @@ func TestRequiredBoolFlag(t *testing.T) {
 		assert.True(t, config.Accept)
 	})
 }
+
+// --- hidden tag tests ---
+
+func TestFromStructHiddenFlag(t *testing.T) {
+	type Config struct {
+		Visible    string `long:"visible" description:"shown in help"`
+		LegacyYes  string `long:"legacy-yes" description:"deprecated" hidden:"yes"`
+		LegacyTrue string `long:"legacy-true" description:"deprecated" hidden:"true"`
+	}
+
+	config := &Config{}
+	fs := NewFlagSet("test")
+	err := fs.FromStruct(config)
+	assert.NoError(t, err)
+
+	t.Run("flag is still parseable", func(t *testing.T) {
+		err := fs.Parse([]string{"--legacy-yes", "old"})
+		assert.NoError(t, err)
+		assert.Equal(t, "old", config.LegacyYes)
+	})
+
+	t.Run("hidden flag omitted from help output", func(t *testing.T) {
+		var buf bytes.Buffer
+		stdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		fs.WriteFlagHelp()
+		_ = w.Close()
+		os.Stdout = stdout
+		_, _ = io.Copy(&buf, r)
+
+		output := buf.String()
+		assert.Contains(t, output, "--visible")
+		assert.NotContains(t, output, "--legacy-yes")
+		assert.NotContains(t, output, "--legacy-true")
+	})
+
+	t.Run("hidden propagates to FlagDoc", func(t *testing.T) {
+		doc := fs.HelpDoc()
+		flagsByName := make(map[string]FlagDoc)
+		for _, f := range doc.Flags {
+			flagsByName[f.Name] = f
+		}
+		assert.False(t, flagsByName["visible"].Hidden)
+		assert.True(t, flagsByName["legacy-yes"].Hidden)
+		assert.True(t, flagsByName["legacy-true"].Hidden)
+	})
+}

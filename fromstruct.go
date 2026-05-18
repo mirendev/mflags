@@ -61,6 +61,7 @@ var knownTags = map[string]bool{
 	"default":     true,
 	"env":         true,
 	"required":    true,
+	"hidden":      true,
 	"usage":       true,
 	"description": true,
 	"choice":      true,
@@ -68,6 +69,16 @@ var knownTags = map[string]bool{
 	"rest":        true,
 	"unknown":     true,
 	"group":       true,
+}
+
+// isHiddenTag reports whether a hidden:"..." struct tag value is truthy.
+// Accepts the common boolean-ish forms callers tend to emit.
+func isHiddenTag(v string) bool {
+	switch v {
+	case "yes", "true", "1":
+		return true
+	}
+	return false
 }
 
 // validateStructTags checks that every struct tag on exported fields is one
@@ -368,6 +379,7 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 		defaultValue := field.Tag.Get("default")
 		envVar := field.Tag.Get("env")
 		required := field.Tag.Get("required") == "true"
+		hidden := isHiddenTag(field.Tag.Get("hidden"))
 
 		usage := field.Tag.Get("usage")
 		if usage == "" {
@@ -554,6 +566,7 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 		if flag, ok := f.flags[longName]; ok {
 			flag.EnvVar = envVar
 			flag.Required = required
+			flag.Hidden = hidden
 			if envVar != "" {
 				if envVal, ok := os.LookupEnv(envVar); ok {
 					if err := flag.Value.Set(envVal); err != nil {

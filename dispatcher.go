@@ -70,6 +70,14 @@ type RequiredFeatureProvider interface {
 	RequiredFeature() string
 }
 
+// CommandGroupProvider is an interface for commands that belong to a named group.
+// Groups are used by consumers to organize commands in help output (e.g. separating
+// operator commands from deployer commands).
+type CommandGroupProvider interface {
+	// CommandGroup returns the group name for this command, or "" for ungrouped.
+	CommandGroup() string
+}
+
 // OutputFormatter is an interface for commands that can specify their output format
 type OutputFormatter interface {
 	// OutputFormat returns the output format for this command
@@ -91,6 +99,7 @@ type funcCommand struct {
 	usage        string
 	examples     []Example
 	outputFormat OutputFormat
+	group        string
 }
 
 // CommandOption is a functional option for configuring a command
@@ -107,6 +116,13 @@ func WithUsage(usage string) CommandOption {
 func WithExamples(examples ...Example) CommandOption {
 	return func(c *funcCommand) {
 		c.examples = examples
+	}
+}
+
+// WithCommandGroup sets the group name for the command.
+func WithCommandGroup(group string) CommandOption {
+	return func(c *funcCommand) {
+		c.group = group
 	}
 }
 
@@ -157,6 +173,11 @@ func (c *funcCommand) Examples() []Example {
 	return c.examples
 }
 
+// CommandGroup returns the group name for this command.
+func (c *funcCommand) CommandGroup() string {
+	return c.group
+}
+
 // OutputFormat returns the output format for this command
 func (c *funcCommand) OutputFormat() OutputFormat {
 	return c.outputFormat
@@ -178,6 +199,11 @@ type CommandEntry struct {
 type Dispatcher struct {
 	commands map[string]*CommandEntry
 	name     string
+}
+
+// Name returns the dispatcher's program name.
+func (d *Dispatcher) Name() string {
+	return d.name
 }
 
 // NewDispatcher creates a new command dispatcher
@@ -504,7 +530,7 @@ func (d *Dispatcher) showHelp() error {
 	fmt.Printf("Usage: %s <command> [arguments]\n\n", d.name)
 	fmt.Println("Available commands:")
 
-	children := d.getDirectChildren("")
+	children := d.GetDirectChildren("")
 
 	// Find max length for alignment
 	maxLen := 0
@@ -515,7 +541,7 @@ func (d *Dispatcher) showHelp() error {
 	}
 
 	for _, child := range children {
-		grandchildren := d.getDirectChildren(child.Path)
+		grandchildren := d.GetDirectChildren(child.Path)
 		suffix := ""
 		if len(grandchildren) > 0 {
 			suffix = " " + faint(subCommandsLabel(len(grandchildren)))
@@ -599,7 +625,7 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 	}
 
 	// Show sub-commands if any exist (including implicit namespaces)
-	children := d.getDirectChildren(entry.Path)
+	children := d.GetDirectChildren(entry.Path)
 	if len(children) > 0 {
 		fmt.Println("\nSub-commands:")
 
@@ -613,7 +639,7 @@ func (d *Dispatcher) showCommandHelp(entry *CommandEntry) error {
 
 		// Print sub-commands with usage
 		for _, child := range children {
-			grandchildren := d.getDirectChildren(child.Path)
+			grandchildren := d.GetDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
 				suffix = " " + faint(subCommandsLabel(len(grandchildren)))
@@ -662,12 +688,14 @@ type ChildEntry struct {
 	Path    string // The full path (parentPath + " " + Name, or just Name for top-level)
 	Usage   string // Usage text (from registered command, or empty for namespaces)
 	IsEntry bool   // True if this is a registered command, false if just a namespace
+	Group   string // Group name from CommandGroupProvider, or empty for ungrouped
 }
 
-// getDirectChildren returns the direct children of a path, including both
+// GetDirectChildren returns the direct children of a path, including both
 // registered commands and implicit namespaces. If parentPath is empty, returns
 // top-level entries.
-func (d *Dispatcher) getDirectChildren(parentPath string) []ChildEntry {
+func (d *Dispatcher) GetDirectChildren(parentPath string) []ChildEntry {
+	parentPath = normalizeCommandPath(parentPath)
 	children := make(map[string]*ChildEntry)
 
 	for path, entry := range d.commands {
@@ -695,11 +723,16 @@ func (d *Dispatcher) getDirectChildren(parentPath string) []ChildEntry {
 
 		if len(parts) == 1 {
 			// Direct child command
+			group := ""
+			if gp, ok := entry.Command.(CommandGroupProvider); ok {
+				group = gp.CommandGroup()
+			}
 			children[childName] = &ChildEntry{
 				Name:    childName,
 				Path:    childPath,
 				Usage:   entry.Usage,
 				IsEntry: true,
+				Group:   group,
 			}
 		} else {
 			// Deeper command — childName is a namespace (unless already registered)
@@ -743,7 +776,7 @@ func (d *Dispatcher) isNamespace(path string) bool {
 func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 	fmt.Printf("Usage: %s %s <command> [arguments]\n", d.name, namespacePath)
 
-	children := d.getDirectChildren(namespacePath)
+	children := d.GetDirectChildren(namespacePath)
 
 	if len(children) > 0 {
 		fmt.Println("\nAvailable commands:")
@@ -756,7 +789,7 @@ func (d *Dispatcher) showNamespaceHelp(namespacePath string) error {
 		}
 
 		for _, child := range children {
-			grandchildren := d.getDirectChildren(child.Path)
+			grandchildren := d.GetDirectChildren(child.Path)
 			suffix := ""
 			if len(grandchildren) > 0 {
 				suffix = " " + faint(subCommandsLabel(len(grandchildren)))

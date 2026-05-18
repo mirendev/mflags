@@ -57,6 +57,7 @@ type Flag struct {
 	Group    string // group name for help rendering; empty = default "Options:"
 	EnvVar   string // environment variable name (from env:"..." struct tag)
 	Required bool   // whether this flag must be provided
+	Hidden   bool   // omit from help output (from hidden:"yes" struct tag)
 	HasValue bool   // true if value was set by env var or CLI arg
 }
 

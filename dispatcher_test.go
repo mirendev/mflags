@@ -1699,3 +1699,78 @@ func TestDispatcherErrShowHelp(t *testing.T) {
 	})
 }
 
+func TestGetDirectChildrenPopulatesGroup(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	d.Dispatch("deploy", NewCommand(NewFlagSet("deploy"), nil, WithUsage("Deploy an app")))
+	d.Dispatch("server", NewCommand(NewFlagSet("server"), nil, WithUsage("Start server"), WithCommandGroup("Operator")))
+	d.Dispatch("debug", NewCommand(NewFlagSet("debug"), nil, WithUsage("Debug tools"), WithCommandGroup("Operator")))
+
+	children := d.GetDirectChildren("")
+
+	groups := make(map[string]string)
+	for _, child := range children {
+		groups[child.Name] = child.Group
+	}
+
+	assert.Contains(t, groups, "deploy")
+	assert.Equal(t, "", groups["deploy"])
+	assert.Contains(t, groups, "server")
+	assert.Equal(t, "Operator", groups["server"])
+	assert.Contains(t, groups, "debug")
+	assert.Equal(t, "Operator", groups["debug"])
+}
+
+func TestGetDirectChildrenGroupForNamespaceOverriddenByCommand(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	// Register a subcommand first (creates implicit namespace for "server")
+	d.Dispatch("server config", NewCommand(NewFlagSet("server config"), nil, WithUsage("Server config")))
+	// Then register the parent command with a group
+	d.Dispatch("server", NewCommand(NewFlagSet("server"), nil, WithUsage("Start server"), WithCommandGroup("Operator")))
+
+	children := d.GetDirectChildren("")
+
+	var serverEntry ChildEntry
+	for _, child := range children {
+		if child.Name == "server" {
+			serverEntry = child
+			break
+		}
+	}
+
+	assert.True(t, serverEntry.IsEntry)
+	assert.Equal(t, "Operator", serverEntry.Group)
+}
+
+func TestHelpDocIncludesGroup(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	d.Dispatch("deploy", NewCommand(NewFlagSet("deploy"), nil, WithUsage("Deploy an app")))
+	d.Dispatch("server", NewCommand(NewFlagSet("server"), nil, WithUsage("Start server"), WithCommandGroup("Operator")))
+
+	doc := d.HelpDoc()
+
+	groups := make(map[string]string)
+	for _, cmd := range doc.Commands {
+		groups[cmd.Path] = cmd.Group
+	}
+
+	assert.Contains(t, groups, "deploy")
+	assert.Equal(t, "", groups["deploy"])
+	assert.Contains(t, groups, "server")
+	assert.Equal(t, "Operator", groups["server"])
+}
+
+func TestHelpJSONIncludesGroup(t *testing.T) {
+	d := NewDispatcher("myapp")
+
+	d.Dispatch("server", NewCommand(NewFlagSet("server"), nil, WithUsage("Start server"), WithCommandGroup("Operator")))
+
+	data, err := d.HelpJSON()
+	assert.NoError(t, err)
+
+	json := string(data)
+	assert.Contains(t, json, `"group": "Operator"`)
+}
+
