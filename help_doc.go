@@ -19,6 +19,7 @@ type CommandDoc struct {
 	Path            string          `json:"path"`
 	Usage           string          `json:"usage"`
 	Description     string          `json:"description,omitempty"`
+	Group           string          `json:"group,omitempty"`
 	RequiredFeature string          `json:"requiredFeature,omitempty"`
 	Flags           []FlagDoc       `json:"flags"`
 	FlagGroups      []string        `json:"flagGroups"`
@@ -135,13 +136,14 @@ func (d *Dispatcher) HelpJSON() ([]byte, error) {
 
 // buildCommandDocs recursively builds CommandDoc entries for direct children of parentPath.
 func (d *Dispatcher) buildCommandDocs(parentPath string) []CommandDoc {
-	children := d.getDirectChildren(parentPath)
+	children := d.GetDirectChildren(parentPath)
 	docs := make([]CommandDoc, 0, len(children))
 
 	for _, child := range children {
 		cmd := CommandDoc{
 			Path:            child.Path,
 			Usage:           child.Usage,
+			Group:           child.Group,
 			Flags:           []FlagDoc{},
 			FlagGroups:      []string{},
 			PositionalArgs:  []PositionalDoc{},
