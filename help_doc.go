@@ -47,6 +47,7 @@ type FlagDoc struct {
 	Choices  []string `json:"choices,omitempty"`
 	EnvVar   string   `json:"envVar,omitempty"`
 	Required bool     `json:"required,omitempty"`
+	Hidden   bool     `json:"hidden,omitempty"`
 }
 
 // PositionalDoc describes a positional argument in the help document.
@@ -88,6 +89,7 @@ func (f *FlagSet) HelpDoc() *FlagSetDoc {
 			Choices:  []string{},
 			EnvVar:   flag.EnvVar,
 			Required: flag.Required,
+			Hidden:   flag.Hidden,
 		}
 		if flag.Short != 0 {
 			fd.Short = string(flag.Short)

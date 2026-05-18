@@ -49,6 +49,9 @@ func (f *FlagSet) WriteFlagHelp() {
 	var defaultFlags []*Flag
 
 	f.VisitAll(func(flag *Flag) {
+		if flag.Hidden {
+			return
+		}
 		if flag.Group == "" {
 			defaultFlags = append(defaultFlags, flag)
 		} else {
