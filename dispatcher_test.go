@@ -1240,6 +1240,71 @@ func TestDispatcherNamespaceDiscovery(t *testing.T) {
 	})
 }
 
+// TestDispatcherInterspersedValueFlagBeforeSection reproduces the regression where
+// a value-taking global flag placed before a section-style command (a command with
+// an empty flagset that returns ErrShowHelp) caused the resolver to reject the match
+// and fall back to top-level help instead of the section's sub-commands.
+func TestDispatcherInterspersedValueFlagBeforeSection(t *testing.T) {
+	// newDispatcher builds a dispatcher with a section-style "auth" command whose
+	// flagset declares no flags and whose Run returns ErrShowHelp, plus two
+	// sub-commands. A real value-taking flag "-C" is only declared on a sibling
+	// command, so it is unknown to the "auth" section's flagset.
+	newDispatcher := func() *Dispatcher {
+		d := NewDispatcher("myapp")
+
+		authFs := NewFlagSet("auth")
+		authFs.AllowUnknownFlags(true)
+		d.Dispatch("auth", NewCommand(authFs,
+			func(fs *FlagSet, args []string) error { return ErrShowHelp },
+			WithUsage("Authentication commands")))
+
+		d.Dispatch("auth generate", NewCommand(NewFlagSet("auth generate"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Generate auth config")))
+
+		d.Dispatch("auth provider", NewCommand(NewFlagSet("auth provider"),
+			func(fs *FlagSet, args []string) error { return nil },
+			WithUsage("Manage identity providers")))
+
+		return d
+	}
+
+	run := func(t *testing.T, args []string) string {
+		t.Helper()
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := newDispatcher().Execute(args)
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+
+		assert.NoError(t, err)
+		return buf.String()
+	}
+
+	// Each of these must render the "auth" section's sub-commands, NOT top-level help.
+	cases := [][]string{
+		{"-C", "prod", "auth", "help"},
+		{"-C", "prod", "auth"},
+		{"-C", "prod", "auth", "--help"},
+		{"-C", "prod", "auth", "-h"},
+	}
+
+	for _, args := range cases {
+		t.Run(fmt.Sprintf("%v", args), func(t *testing.T) {
+			output := run(t, args)
+			assert.Contains(t, output, "Authentication commands")
+			assert.Contains(t, output, "generate")
+			assert.Contains(t, output, "provider")
+		})
+	}
+}
+
 // TestDispatcherHelpShowsTypes tests that help output shows specific types for flags
 func TestDispatcherHelpShowsTypes(t *testing.T) {
 	d := NewDispatcher("myapp")
@@ -1773,4 +1838,3 @@ func TestHelpJSONIncludesGroup(t *testing.T) {
 	json := string(data)
 	assert.Contains(t, json, `"group": "Operator"`)
 }
-

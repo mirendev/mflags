@@ -473,34 +473,35 @@ func (d *Dispatcher) findCommandWithInterspersedFlags(args []string) (*CommandEn
 				fullArgs = append(fullArgs, args[lastCommandIndex+1:]...)
 			}
 
-			// Try to validate our flag assumptions were correct
-			// Only validate flags that came before the command
+			// Validate that our value-consumption guesses were correct for the
+			// flags that came before the command. We only reject a match when a
+			// KNOWN flag was wrongly assumed to take a value (bool flags don't).
+			//
+			// We deliberately do NOT reject a match just because a pre-command
+			// flag is absent from this command's flagset: callers routinely place
+			// global flags (e.g. -C/--cluster) before a command whose own flagset
+			// doesn't declare them (such as section/namespace commands with empty
+			// flagsets). If a flag is genuinely bogus, fs.Parse reports it as a
+			// clear "unknown flag: X" instead of a misleading "unknown command".
 			valid := true
 			for _, fi := range skippedItems {
-				// Only check flags that came before the end of the command
+				// Only check flags that came before the end of the command; flags
+				// after the command are handled by Parse.
 				if fi.index > lastCommandIndex {
-					continue // This flag is after the command, will be handled by Parse
+					continue
 				}
 
 				flagName := strings.TrimPrefix(fi.flag, "--")
 				flagName = strings.TrimPrefix(flagName, "-")
 
-				// Check if this flag exists in the command's flagset
-				flagFound := false
 				fs.VisitAll(func(f *Flag) {
 					if (len(flagName) == 1 && f.Short == rune(flagName[0])) || f.Name == flagName {
-						flagFound = true
-						// Check if our assumption about the flag taking a value was correct
+						// Check if our assumption about the flag taking a value was correct.
 						if fi.hasValue && f.Value.IsBool() {
 							valid = false // Bool flags don't take values
 						}
 					}
 				})
-
-				if !flagFound && !isHelpFlag(fi.flag) {
-					// Unknown flag (unless it's a help flag which is always valid)
-					valid = false
-				}
 			}
 
 			if valid {
@@ -511,11 +512,6 @@ func (d *Dispatcher) findCommandWithInterspersedFlags(args []string) (*CommandEn
 
 	// No valid command found
 	return nil, args
-}
-
-// isHelpFlag checks if a flag is a help flag
-func isHelpFlag(flag string) bool {
-	return flag == "-h" || flag == "--help"
 }
 
 // normalizeCommandPath normalizes a command path for consistent lookup
