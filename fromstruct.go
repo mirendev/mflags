@@ -69,6 +69,7 @@ var knownTags = map[string]bool{
 	"rest":        true,
 	"unknown":     true,
 	"group":       true,
+	"split":       true,
 }
 
 // isHiddenTag reports whether a hidden:"..." struct tag value is truthy.
@@ -421,11 +422,23 @@ func (f *FlagSet) FromStruct(v any, opts ...FromStructOption) error {
 		case reflect.Slice:
 			switch field.Type.Elem().Kind() {
 			case reflect.String:
+				// split:"false" keeps each flag occurrence whole instead of
+				// splitting it on commas; the default is then one element too.
 				var defVal []string
-				if defaultValue != "" {
-					defVal = strings.Split(defaultValue, ",")
+				switch field.Tag.Get("split") {
+				case "", "true":
+					if defaultValue != "" {
+						defVal = strings.Split(defaultValue, ",")
+					}
+					f.StringArrayVar(fieldValue.Addr().Interface().(*[]string), longName, short, defVal, usage)
+				case "false":
+					if defaultValue != "" {
+						defVal = []string{defaultValue}
+					}
+					f.StringArrayNoSplitVar(fieldValue.Addr().Interface().(*[]string), longName, short, defVal, usage)
+				default:
+					return fmt.Errorf("invalid split tag %q on field %s: must be \"true\" or \"false\"", field.Tag.Get("split"), field.Name)
 				}
-				f.StringArrayVar(fieldValue.Addr().Interface().(*[]string), longName, short, defVal, usage)
 			case reflect.Bool:
 				f.BoolArrayVar(fieldValue.Addr().Interface().(*[]bool), longName, short, usage)
 			case reflect.Int:

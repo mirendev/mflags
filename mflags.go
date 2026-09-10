@@ -271,6 +271,19 @@ func (f *FlagSet) StringArrayVar(p *[]string, name string, short rune, value []s
 	f.Var(&stringArrayValue{values: p}, name, short, usage)
 }
 
+// StringArrayNoSplitVar defines a string array flag like StringArrayVar, except
+// that each occurrence of the flag contributes exactly one element: the value is
+// never split on commas. Use it for flags whose values can contain commas, such
+// as KEY=VALUE pairs or HTTP header values.
+func (f *FlagSet) StringArrayNoSplitVar(p *[]string, name string, short rune, value []string, usage string) {
+	if value != nil {
+		*p = value
+	} else {
+		*p = []string{}
+	}
+	f.Var(&stringArrayValue{values: p, noSplit: true}, name, short, usage)
+}
+
 // StringArray defines a string array flag with the specified name, short form, default value, and usage string.
 // The return value is the address of a []string variable that stores the value of the flag.
 // The flag value is expected to be a comma-separated list of strings.

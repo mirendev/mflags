@@ -407,7 +407,7 @@ myapp completion zsh > /usr/local/share/zsh/site-functions/_myapp
 - `bool` - Boolean flags
 - `string` - String values
 - `int` - Integer values
-- `[]string` - Comma-separated string arrays
+- `[]string` - Comma-separated string arrays (add `split:"false"` to keep each occurrence whole)
 - `time.Duration` - Duration values (parsed by `time.ParseDuration`)
 
 ### Struct Tags
@@ -421,6 +421,7 @@ myapp completion zsh > /usr/local/share/zsh/site-functions/_myapp
 | `position` | Positional argument index | `position:"0"` |
 | `rest` | Capture remaining args | `rest:"true"` |
 | `unknown` | Capture unknown flags | `unknown:"true"` |
+| `split` | For `[]string`: `"false"` stops splitting values on commas, so `-e KEY=a,b` is one element | `split:"false"` |
 
 ## Embedded Structs
 

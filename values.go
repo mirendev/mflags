@@ -342,6 +342,10 @@ func (i *intArrayValue) Type() string {
 type stringArrayValue struct {
 	values     *[]string
 	hasBeenSet bool
+	// noSplit keeps each flag occurrence as one element instead of splitting
+	// it on commas, for values that legitimately contain commas (KEY=a,b,c
+	// environment variables, HTTP header values, and so on).
+	noSplit bool
 }
 
 func (s *stringArrayValue) Set(val string) error {
@@ -350,7 +354,11 @@ func (s *stringArrayValue) Set(val string) error {
 		*s.values = nil
 		s.hasBeenSet = true
 	}
-	*s.values = append(*s.values, strings.Split(val, ",")...)
+	if s.noSplit {
+		*s.values = append(*s.values, val)
+	} else {
+		*s.values = append(*s.values, strings.Split(val, ",")...)
+	}
 	return nil
 }
 
@@ -366,6 +374,9 @@ func (s *stringArrayValue) IsBool() bool {
 }
 
 func (s *stringArrayValue) Type() string {
+	if s.noSplit {
+		return "value"
+	}
 	return "value,..."
 }
 
