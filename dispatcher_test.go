@@ -1523,7 +1523,7 @@ func TestDispatcherRejectsExtraArgs(t *testing.T) {
 
 		err := d.Execute([]string{"app", "services"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [services]")
+		assert.Contains(t, err.Error(), `unexpected argument "services"`)
 	})
 
 	t.Run("nested command with no positional args rejects extra", func(t *testing.T) {
@@ -1538,7 +1538,7 @@ func TestDispatcherRejectsExtraArgs(t *testing.T) {
 
 		err := d.Execute([]string{"app", "services", "extra"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+		assert.Contains(t, err.Error(), `unexpected argument "extra"`)
 	})
 
 	t.Run("command with positional args accepts correct count", func(t *testing.T) {
@@ -1572,7 +1572,7 @@ func TestDispatcherRejectsExtraArgs(t *testing.T) {
 
 		err := d.Execute([]string{"deploy", "production", "extra"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+		assert.Contains(t, err.Error(), `unexpected argument "extra"`)
 	})
 
 	t.Run("command with rest field accepts all args", func(t *testing.T) {

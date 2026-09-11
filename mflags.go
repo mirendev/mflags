@@ -655,8 +655,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 	// Check for unexpected extra arguments when no rest field is defined
 	// Skip validation if allowUnknownFlags is enabled (pass-through mode)
 	if f.restField == nil && !f.allowUnknownFlags && len(f.args) > f.PositionalCount() {
-		extra := f.args[f.PositionalCount():]
-		return fmt.Errorf("unexpected arguments: %v", extra)
+		return &UnexpectedArgsError{Args: f.args[f.PositionalCount():]}
 	}
 
 	// If we have a rest field, populate it with remaining args after positional ones
