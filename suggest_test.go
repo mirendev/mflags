@@ -55,6 +55,14 @@ func TestSuggestNames(t *testing.T) {
 		assert.Equal(t, []string{"apply", "applesauce"}, suggestNames("appl", []string{"apply", "applesauce"}))
 	})
 
+	t.Run("prefix completions rank by characters, not bytes", func(t *testing.T) {
+		// Past the shared "a", "é" is one character but two bytes, while "bc"
+		// is two of each. Measured in bytes the two tie and sort
+		// alphabetically, putting the longer completion first.
+		got := suggestNames("a", []string{"abc", "aé"})
+		assert.Equal(t, []string{"aé", "abc"}, got)
+	})
+
 	t.Run("nothing close returns nil", func(t *testing.T) {
 		assert.Nil(t, suggestNames("zzzzzz", commands))
 	})

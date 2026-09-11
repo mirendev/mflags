@@ -712,7 +712,12 @@ func (f *FlagSet) validateRequired() error {
 // flags whose names are closest to what was typed.
 func (f *FlagSet) unknownLongFlagError(name string) error {
 	candidates := make([]string, 0, len(f.flags))
-	for defined := range f.flags {
+	for defined, flag := range f.flags {
+		// Hidden flags stay out of help output, so advertising one here on a
+		// near-miss typo would undo that.
+		if flag.Hidden {
+			continue
+		}
 		candidates = append(candidates, defined)
 	}
 

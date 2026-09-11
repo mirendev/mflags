@@ -106,7 +106,13 @@ func suggestNames(unknown string, candidates []string) []string {
 		// A prefix match is strong evidence on its own — an abbreviation or a
 		// half-typed word — so it bypasses the distance threshold.
 		if len(c) > len(unknown) && strings.HasPrefix(c, unknown) {
-			matches = append(matches, scored{name: c, prefix: true, dist: len(c) - len(unknown)})
+			// Rank by how much is left to type, in characters — bytes would
+			// sort a short non-ASCII completion behind a longer ASCII one.
+			matches = append(matches, scored{
+				name:   c,
+				prefix: true,
+				dist:   len([]rune(c)) - len([]rune(unknown)),
+			})
 			continue
 		}
 

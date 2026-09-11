@@ -128,6 +128,28 @@ Run 'myapp --help' to see available commands.`, err.Error())
 		assert.NotContains(t, err.Error(), "Did you mean")
 	})
 
+	t.Run("flag-only input names the flag, not an empty command", func(t *testing.T) {
+		for _, args := range [][]string{
+			{"--bogus"},
+			{"-x"},
+			{"--bogus", "--other"},
+			{"--bogus=value"},
+		} {
+			err := unknownCommandDispatcher().Execute(args)
+			require.Error(t, err)
+
+			var ufe *UnknownFlagError
+			require.ErrorAs(t, err, &ufe, "args %q", args)
+			assert.NotContains(t, err.Error(), `unknown command ""`)
+		}
+	})
+
+	t.Run("flag-only input reports the flag as typed", func(t *testing.T) {
+		err := unknownCommandDispatcher().Execute([]string{"--bogus=value"})
+		require.Error(t, err)
+		assert.Equal(t, "unknown flag: --bogus", err.Error())
+	})
+
 	t.Run("only the first word is blamed", func(t *testing.T) {
 		err := unknownCommandDispatcher().Execute([]string{"depoy", "myapp"})
 		require.Error(t, err)
@@ -234,6 +256,25 @@ Did you mean?
 		assert.Equal(t, "-q", ufe.Flag)
 		assert.Empty(t, ufe.Suggestions)
 		assert.Equal(t, "unknown flag: -q", err.Error())
+	})
+
+	t.Run("hidden flags are never suggested", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+		fs := NewFlagSet("deploy")
+		fs.String("name", 'n', "", "Application name")
+		fs.String("internal-token", 0, "", "Internal token")
+		fs.flags["internal-token"].Hidden = true
+		d.Dispatch("deploy", NewCommand(fs,
+			func(fs *FlagSet, args []string) error { return nil }, WithUsage("Deploy")))
+
+		// One edit from the hidden flag, so only its hidden-ness keeps it out.
+		err := d.Execute([]string{"deploy", "--internal-tokn", "x"})
+		require.Error(t, err)
+
+		var ufe *UnknownFlagError
+		require.ErrorAs(t, err, &ufe)
+		assert.Empty(t, ufe.Suggestions)
+		assert.NotContains(t, err.Error(), "internal-token")
 	})
 
 	t.Run("a value flag keeps the parse-error prefix", func(t *testing.T) {

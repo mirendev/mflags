@@ -296,6 +296,23 @@ func (d *Dispatcher) Execute(args []string) error {
 		if hasHelp {
 			return d.showHelp()
 		}
+
+		// Nothing but flags was typed, so there is no word to call an unknown
+		// command. Name the flag instead. No command matched, so there is no
+		// flag set to draw suggestions from.
+		if len(nonFlagArgs) == 0 {
+			for _, arg := range args {
+				if arg == "--" {
+					break
+				}
+				if strings.HasPrefix(arg, "-") && arg != "-" {
+					// Report "--bogus", not "--bogus=value".
+					name, _, _ := strings.Cut(arg, "=")
+					return &UnknownFlagError{Flag: name}
+				}
+			}
+		}
+
 		return d.unknownCommandError(nonFlagArgs)
 	}
 
