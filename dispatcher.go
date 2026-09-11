@@ -353,6 +353,15 @@ func (d *Dispatcher) Execute(args []string) error {
 			}
 			return err
 		}
+
+		// "unknown flag: --naem" already says which part of the command line
+		// went wrong; prefixing it adds nothing and pushes the suggestions
+		// further from the summary.
+		var unknownFlag *UnknownFlagError
+		if errors.As(err, &unknownFlag) {
+			return err
+		}
+
 		return fmt.Errorf("error parsing flags: %w", err)
 	}
 

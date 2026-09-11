@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLevenshtein(t *testing.T) {
+func TestEditDistance(t *testing.T) {
 	cases := []struct {
 		a, b string
 		want int
@@ -18,14 +18,16 @@ func TestLevenshtein(t *testing.T) {
 		{"depoy", "deploy", 1},   // deletion
 		{"deployy", "deploy", 1}, // insertion
 		{"deploj", "deploy", 1},  // substitution
-		{"depoly", "deploy", 2},  // transposition costs two here
+		{"depoly", "deploy", 1},  // transposition
+		{"naem", "name", 1},      // transposition
+		{"recieve", "receive", 1},
 		{"kitten", "sitting", 3},
 		{"café", "cafe", 1}, // one rune, not two bytes
 	}
 
 	for _, c := range cases {
-		assert.Equal(t, c.want, levenshtein(c.a, c.b), "levenshtein(%q, %q)", c.a, c.b)
-		assert.Equal(t, c.want, levenshtein(c.b, c.a), "levenshtein(%q, %q)", c.b, c.a)
+		assert.Equal(t, c.want, editDistance(c.a, c.b), "editDistance(%q, %q)", c.a, c.b)
+		assert.Equal(t, c.want, editDistance(c.b, c.a), "editDistance(%q, %q)", c.b, c.a)
 	}
 }
 

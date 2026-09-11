@@ -10,10 +10,16 @@ import (
 // output, which the closing "--help" line already points at.
 const maxSuggestions = 3
 
-// levenshtein returns the edit distance between a and b, counting insertions,
-// deletions, and substitutions. It compares runes rather than bytes so that
-// non-ASCII command names cost what they look like they cost.
-func levenshtein(a, b string) int {
+// editDistance returns the number of edits between a and b, counting an
+// insertion, a deletion, a substitution, or a transposition of two adjacent
+// characters as one each. Transpositions matter: swapping two letters is among
+// the most common ways to mistype a word, and charging two edits for it would
+// put "recieve" as far from "receive" as a word with two genuinely wrong
+// letters.
+//
+// It compares runes rather than bytes so that non-ASCII names cost what they
+// look like they cost.
+func editDistance(a, b string) int {
 	ar := []rune(a)
 	br := []rune(b)
 
@@ -24,8 +30,10 @@ func levenshtein(a, b string) int {
 		return len(ar)
 	}
 
-	// Two rolling rows of the distance matrix: prev holds the row for the
-	// previous character of a, curr the row being filled in.
+	// Three rolling rows of the distance matrix: curr is the row being filled
+	// in, prev the row above it, and prevPrev the one above that, which only
+	// the transposition case reaches back for.
+	prevPrev := make([]int, len(br)+1)
 	prev := make([]int, len(br)+1)
 	curr := make([]int, len(br)+1)
 
@@ -40,9 +48,17 @@ func levenshtein(a, b string) int {
 			if ar[i-1] == br[j-1] {
 				cost = 0
 			}
-			curr[j] = min(prev[j]+1, min(curr[j-1]+1, prev[j-1]+cost))
+
+			best := min(prev[j]+1, min(curr[j-1]+1, prev[j-1]+cost))
+
+			// The last two characters of each are the same pair, swapped.
+			if i > 1 && j > 1 && ar[i-1] == br[j-2] && ar[i-2] == br[j-1] {
+				best = min(best, prevPrev[j-2]+1)
+			}
+
+			curr[j] = best
 		}
-		prev, curr = curr, prev
+		prevPrev, prev, curr = prev, curr, prevPrev
 	}
 
 	return prev[len(br)]
@@ -94,7 +110,7 @@ func suggestNames(unknown string, candidates []string) []string {
 			continue
 		}
 
-		if d := levenshtein(unknown, c); d <= threshold {
+		if d := editDistance(unknown, c); d <= threshold {
 			matches = append(matches, scored{name: c, dist: d})
 		}
 	}

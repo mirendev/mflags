@@ -48,6 +48,34 @@ func (e *UnknownCommandError) Error() string {
 	return strings.Join(sections, "\n\n")
 }
 
+// UnknownFlagError reports a flag the command does not define. It unwraps to
+// ErrUnknownFlag, so existing errors.Is checks keep working.
+type UnknownFlagError struct {
+	// Flag is the flag as the user typed it, dashes included.
+	Flag string
+	// Suggestions holds close long-flag names, dashes included, nearest first.
+	// Short flags carry no suggestions: a single letter is too little to guess
+	// from.
+	Suggestions []string
+}
+
+func (e *UnknownFlagError) Error() string {
+	sections := []string{"unknown flag: " + e.Flag}
+
+	if len(e.Suggestions) > 0 {
+		var b strings.Builder
+		b.WriteString("Did you mean?")
+		for _, s := range e.Suggestions {
+			fmt.Fprintf(&b, "\n  %s", s)
+		}
+		sections = append(sections, b.String())
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+func (e *UnknownFlagError) Unwrap() error { return ErrUnknownFlag }
+
 // UnexpectedArgsError reports positional arguments a command has nowhere to put.
 type UnexpectedArgsError struct {
 	Args []string

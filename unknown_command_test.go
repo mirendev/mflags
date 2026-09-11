@@ -181,16 +181,70 @@ func TestUnexpectedArgsWithoutSubCommands(t *testing.T) {
 	assert.NotContains(t, err.Error(), "error parsing flags")
 }
 
-func TestUnknownFlagStillReportsParseError(t *testing.T) {
-	// Genuine flag problems keep the flag-parsing prefix.
-	d := NewDispatcher("myapp")
-	fs := NewFlagSet("deploy")
-	fs.Bool("verbose", 'v', false, "Verbose output")
-	d.Dispatch("deploy", NewCommand(fs,
-		func(fs *FlagSet, args []string) error { return nil }, WithUsage("Deploy")))
+func TestUnknownFlagSuggestions(t *testing.T) {
+	newDispatcher := func() *Dispatcher {
+		d := NewDispatcher("myapp")
+		fs := NewFlagSet("deploy")
+		fs.Bool("verbose", 'v', false, "Verbose output")
+		fs.String("name", 'n', "", "Application name")
+		fs.String("namespace", 0, "", "Namespace")
+		d.Dispatch("deploy", NewCommand(fs,
+			func(fs *FlagSet, args []string) error { return nil }, WithUsage("Deploy")))
+		return d
+	}
 
-	err := d.Execute([]string{"deploy", "--nope"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error parsing flags")
-	assert.ErrorIs(t, err, ErrUnknownFlag)
+	t.Run("suggests a close long flag", func(t *testing.T) {
+		err := newDispatcher().Execute([]string{"deploy", "--naem", "x"})
+		require.Error(t, err)
+
+		var ufe *UnknownFlagError
+		require.ErrorAs(t, err, &ufe)
+		assert.Equal(t, "--naem", ufe.Flag)
+		assert.Equal(t, []string{"--name"}, ufe.Suggestions)
+
+		assert.Equal(t, `unknown flag: --naem
+
+Did you mean?
+  --name`, err.Error())
+	})
+
+	t.Run("still unwraps to ErrUnknownFlag", func(t *testing.T) {
+		err := newDispatcher().Execute([]string{"deploy", "--naem", "x"})
+		assert.ErrorIs(t, err, ErrUnknownFlag)
+	})
+
+	t.Run("drops the redundant flag-parsing prefix", func(t *testing.T) {
+		err := newDispatcher().Execute([]string{"deploy", "--naem", "x"})
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "error parsing flags")
+	})
+
+	t.Run("nothing close offers no guess", func(t *testing.T) {
+		err := newDispatcher().Execute([]string{"deploy", "--zzzzzzzz"})
+		require.Error(t, err)
+		assert.Equal(t, "unknown flag: --zzzzzzzz", err.Error())
+	})
+
+	t.Run("short flags carry no suggestions", func(t *testing.T) {
+		err := newDispatcher().Execute([]string{"deploy", "-q"})
+		require.Error(t, err)
+
+		var ufe *UnknownFlagError
+		require.ErrorAs(t, err, &ufe)
+		assert.Equal(t, "-q", ufe.Flag)
+		assert.Empty(t, ufe.Suggestions)
+		assert.Equal(t, "unknown flag: -q", err.Error())
+	})
+
+	t.Run("a value flag keeps the parse-error prefix", func(t *testing.T) {
+		d := NewDispatcher("myapp")
+		fs := NewFlagSet("deploy")
+		fs.Int("port", 'p', 0, "Port")
+		d.Dispatch("deploy", NewCommand(fs,
+			func(fs *FlagSet, args []string) error { return nil }, WithUsage("Deploy")))
+
+		err := d.Execute([]string{"deploy", "--port", "notanumber"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "error parsing flags")
+	})
 }

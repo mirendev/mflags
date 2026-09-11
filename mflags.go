@@ -708,6 +708,22 @@ func (f *FlagSet) validateRequired() error {
 	return nil
 }
 
+// unknownLongFlagError reports an undefined long flag, offering the defined
+// flags whose names are closest to what was typed.
+func (f *FlagSet) unknownLongFlagError(name string) error {
+	candidates := make([]string, 0, len(f.flags))
+	for defined := range f.flags {
+		candidates = append(candidates, defined)
+	}
+
+	suggestions := suggestNames(name, candidates)
+	for i, s := range suggestions {
+		suggestions[i] = "--" + s
+	}
+
+	return &UnknownFlagError{Flag: "--" + name, Suggestions: suggestions}
+}
+
 func (f *FlagSet) parseLongFlag(name string, args []string, index *int) (bool, error) {
 	var value string
 	hasValue := false
@@ -727,7 +743,7 @@ func (f *FlagSet) parseLongFlag(name string, args []string, index *int) (bool, e
 			*index = len(args) - 1 // Skip to end
 			return true, nil
 		}
-		return false, fmt.Errorf("%w: --%s", ErrUnknownFlag, name)
+		return false, f.unknownLongFlagError(name)
 	}
 
 	if flag.Value.IsBool() {
@@ -767,7 +783,7 @@ func (f *FlagSet) parseShortFlags(shortFlags string, args []string, index *int) 
 				*index = len(args) - 1 // Skip to end
 				return nil
 			}
-			return fmt.Errorf("%w: -%c", ErrUnknownFlag, r)
+			return &UnknownFlagError{Flag: fmt.Sprintf("-%c", r)}
 		}
 
 		if flag.Value.IsBool() {
