@@ -427,7 +427,7 @@ func TestExtraArgumentsRejected(t *testing.T) {
 
 		err := fs.Parse([]string{"extra"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+		assert.Contains(t, err.Error(), `unexpected argument "extra"`)
 	})
 
 	t.Run("multiple extra args rejected", func(t *testing.T) {
@@ -436,7 +436,7 @@ func TestExtraArgumentsRejected(t *testing.T) {
 
 		err := fs.Parse([]string{"extra1", "extra2", "extra3"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra1 extra2 extra3]")
+		assert.Contains(t, err.Error(), `unexpected arguments: "extra1" "extra2" "extra3"`)
 	})
 
 	t.Run("positional args rejects extra args", func(t *testing.T) {
@@ -446,7 +446,7 @@ func TestExtraArgumentsRejected(t *testing.T) {
 
 		err := fs.Parse([]string{"a", "b", "extra"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+		assert.Contains(t, err.Error(), `unexpected argument "extra"`)
 	})
 
 	t.Run("positional with gaps rejects extra args", func(t *testing.T) {
@@ -459,7 +459,7 @@ func TestExtraArgumentsRejected(t *testing.T) {
 		// 5 args fill all positions, 6th is extra
 		err := fs.Parse([]string{"a", "b", "c", "d", "e", "extra"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected arguments: [extra]")
+		assert.Contains(t, err.Error(), `unexpected argument "extra"`)
 	})
 
 	t.Run("rest field accepts all args", func(t *testing.T) {

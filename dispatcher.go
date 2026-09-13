@@ -296,7 +296,24 @@ func (d *Dispatcher) Execute(args []string) error {
 		if hasHelp {
 			return d.showHelp()
 		}
-		return fmt.Errorf("unknown command: %s", strings.Join(args, " "))
+
+		// Nothing but flags was typed, so there is no word to call an unknown
+		// command. Name the flag instead. No command matched, so there is no
+		// flag set to draw suggestions from.
+		if len(nonFlagArgs) == 0 {
+			for _, arg := range args {
+				if arg == "--" {
+					break
+				}
+				if strings.HasPrefix(arg, "-") && arg != "-" {
+					// Report "--bogus", not "--bogus=value".
+					name, _, _ := strings.Cut(arg, "=")
+					return &UnknownFlagError{Flag: name}
+				}
+			}
+		}
+
+		return d.unknownCommandError(nonFlagArgs)
 	}
 
 	// Check if remaining non-flag args form a namespace under the matched command.
@@ -344,7 +361,33 @@ func (d *Dispatcher) Execute(args []string) error {
 		fs.disableAutoHelp = true
 	}
 	if err := fs.Parse(allArgs); err != nil {
+		// Leftover positional arguments are not a flag-parsing problem, and
+		// saying so only misdirects the reader.
+		var unexpected *UnexpectedArgsError
+		if errors.As(err, &unexpected) {
+			if name, ok := d.mistypedSubCommand(entry, unexpected.Args); ok {
+				return d.unknownSubCommandError(entry.Path, name)
+			}
+			return err
+		}
+
+		// "unknown flag: --naem" already says which part of the command line
+		// went wrong; prefixing it adds nothing and pushes the suggestions
+		// further from the summary.
+		var unknownFlag *UnknownFlagError
+		if errors.As(err, &unknownFlag) {
+			return err
+		}
+
 		return fmt.Errorf("error parsing flags: %w", err)
+	}
+
+	// A command that tolerates unknown flags skips Parse's extra-argument check
+	// entirely, so a mistyped sub-command under one would otherwise run as if
+	// nothing were wrong. Catch it here, once Parse has had its chance to claim
+	// those words as flag values.
+	if name, ok := d.mistypedSubCommand(entry, fs.Args()); ok {
+		return d.unknownSubCommandError(entry.Path, name)
 	}
 
 	// Execute the command with the parsed flagset and remaining args
@@ -361,6 +404,82 @@ func (d *Dispatcher) Execute(args []string) error {
 // Run is an alias for Execute
 func (d *Dispatcher) Run(args []string) error {
 	return d.Execute(args)
+}
+
+// unknownCommandError builds the error for command words that matched nothing.
+// It first walks the words the user typed to find the deepest namespace among
+// them, so that "miren debug wibble" blames "wibble" under "debug" rather than
+// blaming "debug", which is perfectly valid.
+func (d *Dispatcher) unknownCommandError(words []string) error {
+	parentPath := ""
+	unknownIdx := 0
+
+	for i := 1; i < len(words); i++ {
+		candidate := normalizeCommandPath(strings.Join(words[:i], " "))
+		if d.isNamespace(candidate) {
+			parentPath = candidate
+			unknownIdx = i
+		}
+	}
+
+	name := ""
+	if unknownIdx < len(words) {
+		name = words[unknownIdx]
+	}
+
+	return d.unknownSubCommandError(parentPath, name)
+}
+
+// mistypedSubCommand reports whether leftover arguments under entry can only be
+// a misspelled sub-command: the command has children of its own and declares
+// nowhere to put arguments. It returns the offending word.
+func (d *Dispatcher) mistypedSubCommand(entry *CommandEntry, leftover []string) (string, bool) {
+	if len(leftover) == 0 {
+		return "", false
+	}
+
+	fs := entry.Command.FlagSet()
+	if fs == nil || fs.PositionalCount() > 0 || fs.restField != nil {
+		return "", false
+	}
+
+	children := d.GetDirectChildren(entry.Path)
+	if len(children) == 0 {
+		return "", false
+	}
+
+	known := make(map[string]bool, len(children))
+	for _, c := range children {
+		known[c.Name] = true
+	}
+
+	for _, word := range leftover {
+		// "help" is a keyword the dispatcher handles for itself, and a word
+		// that really names a sub-command was already matched as one.
+		if word == "help" || known[word] {
+			continue
+		}
+		return word, true
+	}
+
+	return "", false
+}
+
+// unknownSubCommandError builds the error for a word that should have named a
+// sub-command of parentPath but named nothing at all.
+func (d *Dispatcher) unknownSubCommandError(parentPath, name string) error {
+	children := d.GetDirectChildren(parentPath)
+	candidates := make([]string, 0, len(children))
+	for _, c := range children {
+		candidates = append(candidates, c.Name)
+	}
+
+	return &UnknownCommandError{
+		Program:     d.name,
+		ParentPath:  parentPath,
+		Name:        name,
+		Suggestions: suggestNames(name, candidates),
+	}
 }
 
 // findCommand finds the best matching command for the given arguments

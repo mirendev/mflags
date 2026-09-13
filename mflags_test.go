@@ -1092,7 +1092,7 @@ func TestInvalidRestFieldType(t *testing.T) {
 	// Since the rest field is invalid and ignored, extra args should be rejected
 	err = fs.Parse([]string{"arg1", "arg2"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected arguments")
+	assert.Contains(t, err.Error(), `unexpected arguments: "arg1" "arg2"`)
 
 	// The rest field should be ignored since it's not []string
 	assert.Equal(t, "", config.RestField)
@@ -1287,7 +1287,7 @@ func TestInvalidPositionTag(t *testing.T) {
 	// so any args should be rejected
 	err = fs.Parse([]string{"value"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected arguments")
+	assert.Contains(t, err.Error(), `unexpected argument "value"`)
 
 	assert.Equal(t, "", config.Item) // Field is ignored due to invalid position
 }
@@ -1307,7 +1307,7 @@ func TestNegativePositionTag(t *testing.T) {
 	// so any args should be rejected
 	err = fs.Parse([]string{"value"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected arguments")
+	assert.Contains(t, err.Error(), `unexpected argument "value"`)
 
 	assert.Equal(t, "", config.Item) // Field is ignored due to negative position
 }
