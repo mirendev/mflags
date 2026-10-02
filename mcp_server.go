@@ -291,14 +291,8 @@ func (s *MCPServer) handleInitialize(request MCPRequest) {
 		}
 	}
 
-	// Check protocol version compatibility
-	if params.ProtocolVersion != MCPProtocolVersion {
-		// For now, we only support one version
-		s.sendErrorResponse(request.ID, -32602, "Unsupported protocol version",
-			map[string]string{
-				"supported": MCPProtocolVersion,
-				"requested": params.ProtocolVersion,
-			})
+	if params.ProtocolVersion == "" {
+		s.sendErrorResponse(request.ID, -32602, "Invalid params", "protocolVersion must be a nonempty string")
 		return
 	}
 
@@ -317,6 +311,8 @@ func (s *MCPServer) handleInitialize(request MCPRequest) {
 		},
 	}
 
+	// Select the revision we support, even if the client requested another one.
+	// The client decides whether it can continue with this revision.
 	result := InitializeResult{
 		ProtocolVersion: MCPProtocolVersion,
 		Capabilities:    capabilities,

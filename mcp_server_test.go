@@ -83,6 +83,74 @@ func TestMCPServerInitialization(t *testing.T) {
 	assert.Equal(t, "1.0.0", result.ServerInfo.Version)
 }
 
+func TestMCPServerInitializeVersionNegotiation(t *testing.T) {
+	for _, version := range []string{"2025-06-18", "2025-11-25", "2024-11-05", "1.0.0"} {
+		t.Run(version, func(t *testing.T) {
+			server := NewMCPServer(NewDispatcher("testapp"))
+			input := fmt.Sprintf(`{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"protocolVersion":%q,"capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}`, version)
+			output := bytes.NewBuffer(nil)
+			server.SetInput(strings.NewReader(input + "\n"))
+			server.SetOutput(output)
+
+			require.NoError(t, server.Run())
+			var response struct {
+				JSONRPC string           `json:"jsonrpc"`
+				ID      int              `json:"id"`
+				Result  InitializeResult `json:"result"`
+				Error   *MCPError        `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(output.Bytes(), &response))
+			require.Nil(t, response.Error)
+			assert.Equal(t, "2.0", response.JSONRPC)
+			assert.Equal(t, 7, response.ID)
+			assert.Equal(t, "2025-06-18", response.Result.ProtocolVersion)
+			assert.NotNil(t, response.Result.Capabilities.Tools)
+			assert.True(t, server.initialized)
+		})
+	}
+}
+
+func TestMCPServerInitializeInvalidParams(t *testing.T) {
+	tests := []struct {
+		name   string
+		params string
+	}{
+		{"missing params", ""},
+		{"null params", `null`},
+		{"array params", `[]`},
+		{"string params", `"invalid"`},
+		{"missing version", `{}`},
+		{"empty version", `{"protocolVersion":""}`},
+		{"null version", `{"protocolVersion":null}`},
+		{"numeric version", `{"protocolVersion":20251125}`},
+		{"invalid capabilities", `{"protocolVersion":"2025-11-25","capabilities":[]}`},
+		{"invalid client info", `{"protocolVersion":"2025-11-25","clientInfo":"invalid"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := NewMCPServer(NewDispatcher("testapp"))
+			input := `{"jsonrpc":"2.0","id":7,"method":"initialize"`
+			if test.params != "" {
+				input += `,"params":` + test.params
+			}
+			output := bytes.NewBuffer(nil)
+			server.SetInput(strings.NewReader(input + "}\n"))
+			server.SetOutput(output)
+
+			require.NoError(t, server.Run())
+			var response MCPResponse
+			require.NoError(t, json.Unmarshal(output.Bytes(), &response))
+			require.NotNil(t, response.Error)
+			assert.Equal(t, "2.0", response.JSONRPC)
+			assert.Equal(t, float64(7), response.ID)
+			assert.Equal(t, -32602, response.Error.Code)
+			assert.Equal(t, "Invalid params", response.Error.Message)
+			assert.Nil(t, response.Result)
+			assert.False(t, server.initialized)
+		})
+	}
+}
+
 func TestMCPServerToolsList(t *testing.T) {
 	// Create a dispatcher with multiple commands
 	d := NewDispatcher("testapp")
@@ -540,18 +608,18 @@ func TestMCPServerInvalidRequests(t *testing.T) {
 			expectedCode:  -32601,
 		},
 		{
-			name: "wrong protocol version",
+			name: "missing protocol version",
 			request: func() string {
 				req := MCPRequest{
 					JSONRPC: "2.0",
 					ID:      1,
 					Method:  "initialize",
-					Params:  json.RawMessage(`{"protocolVersion": "1.0.0"}`),
+					Params:  json.RawMessage(`{}`),
 				}
 				data, _ := json.Marshal(req)
 				return string(data)
 			}(),
-			expectedError: "Unsupported protocol version",
+			expectedError: "Invalid params",
 			expectedCode:  -32602,
 		},
 		{
